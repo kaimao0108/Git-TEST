@@ -440,6 +440,41 @@ class SoundFX {
         this.playTone(330, 0.04, 'triangle', 0.08, 160);
     }
 
+    playSelect() {
+        this.playTone(880, 0.04, 'triangle', 0.09);
+        setTimeout(() => this.playTone(1318.51, 0.05, 'triangle', 0.08), 35);
+    }
+
+    playSlash() {
+        this.playNoise(0.06, 0.08, 1600);
+        this.playTone(320, 0.05, 'triangle', 0.07, 120);
+    }
+
+    playMagic() {
+        this.playTone(659.25, 0.08, 'sine', 0.08);
+        setTimeout(() => this.playTone(880.00, 0.12, 'sine', 0.08), 35);
+    }
+
+    playExplosion() {
+        this.playNoise(0.24, 0.15, 600);
+        this.playTone(180, 0.20, 'sawtooth', 0.10, 45);
+    }
+
+    playInstantKill() {
+        this.playTone(220, 0.35, 'sawtooth', 0.14, 55);
+        this.playNoise(0.25, 0.12, 400);
+    }
+
+    playCritical() {
+        this.playNoise(0.10, 0.16, 2200);
+        this.playTone(587.33, 0.08, 'sawtooth', 0.14, 1174.66);
+    }
+
+    playHurt() {
+        this.playNoise(0.08, 0.11, 700);
+        this.playTone(130, 0.08, 'sawtooth', 0.09, 50);
+    }
+
     playHit() {
         this.playNoise(0.06, 0.09, 800);
         this.playTone(150, 0.05, 'sawtooth', 0.06, 50);
@@ -742,4 +777,14 @@ class SoundFX {
     }
 }
 
-window.soundFx = new SoundFX();
+// Defensive Proxy: prevents any unhandled or missing SFX call from crashing UI/Gameplay
+const rawSoundFx = new SoundFX();
+window.soundFx = new Proxy(rawSoundFx, {
+    get(target, prop) {
+        if (prop in target) {
+            const val = target[prop];
+            return typeof val === 'function' ? val.bind(target) : val;
+        }
+        return function() {}; // Safe fallback no-op
+    }
+});
