@@ -1,4 +1,127 @@
-// Game Entities: Player, Enemy, Projectile, ExpGem, Chest, FloatingText
+// Game Entities: Player, Enemy, Projectile, ExpGem, Chest, FloatingText, ParticleSystem
+
+class Particle {
+    constructor(config) {
+        this.x = config.x;
+        this.y = config.y;
+        this.vx = config.vx || 0;
+        this.vy = config.vy || 0;
+        this.color = config.color || '#ffd700';
+        this.radius = config.radius || 3;
+        this.shape = config.shape || 'circle'; // 'circle', 'spark', 'star', 'leaf', 'ring', 'cross'
+        this.lifetime = config.lifetime || 0.6;
+        this.timer = 0;
+        this.decay = config.decay || 1.0;
+        this.rotation = config.rotation || 0;
+        this.rotSpeed = config.rotSpeed || (Math.random() * 6 - 3);
+        this.dead = false;
+    }
+
+    update(dt) {
+        this.timer += dt;
+        if (this.timer >= this.lifetime) {
+            this.dead = true;
+            return;
+        }
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.vx *= Math.max(0, 1 - dt * 2.5);
+        this.vy *= Math.max(0, 1 - dt * 2.5);
+        this.rotation += this.rotSpeed * dt;
+    }
+
+    render(ctx) {
+        const progress = this.timer / this.lifetime;
+        const alpha = Math.max(0, 1 - progress);
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = this.color;
+        ctx.strokeStyle = this.color;
+
+        if (this.shape === 'spark') {
+            ctx.beginPath();
+            ctx.moveTo(0, -this.radius * 1.8);
+            ctx.lineTo(this.radius * 0.5, 0);
+            ctx.lineTo(0, this.radius * 1.8);
+            ctx.lineTo(-this.radius * 0.5, 0);
+            ctx.closePath();
+            ctx.fill();
+        } else if (this.shape === 'star') {
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-this.radius * 2, 0); ctx.lineTo(this.radius * 2, 0);
+            ctx.moveTo(0, -this.radius * 2); ctx.lineTo(0, this.radius * 2);
+            ctx.stroke();
+        } else if (this.shape === 'leaf') {
+            ctx.beginPath();
+            ctx.ellipse(0, 0, this.radius * 1.5, this.radius * 0.7, Math.PI / 4, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (this.shape === 'ring') {
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius * (1 + progress * 2), 0, Math.PI * 2);
+            ctx.stroke();
+        } else if (this.shape === 'cross') {
+            ctx.fillRect(-this.radius * 1.5, -this.radius * 0.5, this.radius * 3, this.radius);
+            ctx.fillRect(-this.radius * 0.5, -this.radius * 1.5, this.radius, this.radius * 3);
+        } else {
+            ctx.beginPath();
+            ctx.arc(0, 0, Math.max(0.5, this.radius * (1 - progress * 0.5)), 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+}
+
+class ParticleSystem {
+    constructor() {
+        this.particles = [];
+    }
+
+    add(config) {
+        if (this.particles.length < 400) {
+            this.particles.push(new Particle(config));
+        }
+    }
+
+    burst(x, y, count, color = '#ffd700', speed = 120, shape = 'circle', lifetime = 0.5) {
+        for (let i = 0; i < count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const spd = (Math.random() * 0.8 + 0.4) * speed;
+            this.add({
+                x,
+                y,
+                vx: Math.cos(angle) * spd,
+                vy: Math.sin(angle) * spd,
+                color,
+                radius: Math.random() * 3 + 2,
+                shape,
+                lifetime: Math.random() * 0.3 + lifetime
+            });
+        }
+    }
+
+    update(dt) {
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            this.particles[i].update(dt);
+            if (this.particles[i].dead) {
+                this.particles.splice(i, 1);
+            }
+        }
+    }
+
+    render(ctx) {
+        for (let i = 0; i < this.particles.length; i++) {
+            this.particles[i].render(ctx);
+        }
+    }
+}
 
 class Player {
     constructor(characterId, x = 0, y = 0) {
@@ -7,9 +130,15 @@ class Player {
         this.y = y;
         this.vx = 0;
         this.vy = 0;
-        this.facing = 1; // 1: right, -1: left
+
+        // 8-Direction System (0: S, 1: SE, 2: E, 3: NE, 4: N, 5: NW, 6: W, 7: SW)
+        this.dirIndex = 0; // Default facing South (Down)
+        this.facing = 1;   // Legacy: 1 (right), -1 (left)
         this.isMoving = false;
-        this.radius = 12;
+        this.walkTimer = 0;
+        this.walkFrame = 0; // 0, 1, 2, 3
+        this.dustTimer = 0;
+        this.radius = 13;
 
         this.level = 1;
         this.exp = 0;
@@ -54,7 +183,7 @@ class Player {
             if (!lvlInfo) continue;
 
             if (pData.stat === 'might') might += lvlInfo.value;
-            if (pData.stat === 'cooldown') cooldownMod += lvlInfo.value; // e.g. -0.08
+            if (pData.stat === 'cooldown') cooldownMod += lvlInfo.value;
             if (pData.stat === 'speed') speedMod += lvlInfo.value;
             if (pData.stat === 'area') areaMod += lvlInfo.value;
             if (pData.stat === 'duration') durationMod += lvlInfo.value;
@@ -72,7 +201,7 @@ class Player {
         this.critChance = critBonus;
         this.armor = armor;
         this.hpRegen = regen;
-        this.pickupRange = (c.pickupRange || 120) * magnetMod;
+        this.pickupRange = (c.pickupRange || 130) * magnetMod;
         this.amountBonus = amountBonus;
     }
 
@@ -154,7 +283,7 @@ class Player {
         if (this.invincibleTimer > 0) return 0;
         const actualDmg = Math.max(1, Math.round(amount - this.armor));
         this.hp -= actualDmg;
-        this.invincibleTimer = 0.45; // 0.45s invulnerability frames
+        this.invincibleTimer = 0.45;
         window.soundFx.playHurt();
         return actualDmg;
     }
@@ -163,14 +292,49 @@ class Player {
         this.hp = Math.min(this.maxHp, this.hp + amount);
     }
 
-    update(dt, inputDir) {
-        // Handle input direction
+    update(dt, inputDir, particleSystem) {
         this.vx = inputDir.x * this.speed;
         this.vy = inputDir.y * this.speed;
         this.isMoving = inputDir.x !== 0 || inputDir.y !== 0;
 
-        if (inputDir.x > 0.05) this.facing = 1;
-        else if (inputDir.x < -0.05) this.facing = -1;
+        // Calculate 8 Directions
+        if (this.isMoving) {
+            const angle = Math.atan2(inputDir.y, inputDir.x); // -PI to PI
+            // Normalized to 0..7: 0: East, 1: SE, 2: S, 3: SW, 4: W, 5: NW, 6: N, 7: NE
+            let octant = Math.round(angle / (Math.PI / 4));
+            if (octant < 0) octant += 8;
+
+            // Map to standard game 8-dir: 0:S, 1:SE, 2:E, 3:NE, 4:N, 5:NW, 6:W, 7:SW
+            const dirMapping = [2, 1, 0, 7, 6, 5, 4, 3];
+            this.dirIndex = dirMapping[octant % 8];
+
+            if (inputDir.x > 0.05) this.facing = 1;
+            else if (inputDir.x < -0.05) this.facing = -1;
+
+            // Walk animation cycle
+            this.walkTimer += dt * 10;
+            this.walkFrame = Math.floor(this.walkTimer) % 4;
+
+            // Running dust particles
+            if (particleSystem) {
+                this.dustTimer += dt;
+                if (this.dustTimer > 0.12) {
+                    this.dustTimer = 0;
+                    particleSystem.add({
+                        x: this.x + (Math.random() * 8 - 4),
+                        y: this.y + 12,
+                        vx: -inputDir.x * 20 + (Math.random() * 10 - 5),
+                        vy: -inputDir.y * 20 - 10,
+                        color: '#65a840',
+                        radius: 2.5,
+                        lifetime: 0.35
+                    });
+                }
+            }
+        } else {
+            this.walkFrame = 0;
+            this.walkTimer = 0;
+        }
 
         this.x += this.vx * dt;
         this.y += this.vy * dt;
@@ -208,6 +372,7 @@ class Enemy {
         this.kbX = 0;
         this.kbY = 0;
         this.erraticTimer = Math.random() * 2;
+        this.healCooldown = 2.5;
     }
 
     takeDamage(amount, knockbackDist = 0, fromX = 0, fromY = 0) {
@@ -228,7 +393,7 @@ class Enemy {
         return actualDmg;
     }
 
-    update(dt, playerX, playerY) {
+    update(dt, playerX, playerY, spatialGrid, particleSystem) {
         if (this.hitFlashTimer > 0) this.hitFlashTimer -= dt;
 
         // Apply knockback decay
@@ -237,14 +402,39 @@ class Enemy {
         this.kbX *= Math.max(0, 1 - dt * 8);
         this.kbY *= Math.max(0, 1 - dt * 8);
 
+        // Healslime support ability
+        if (this.data.isHealer && spatialGrid) {
+            this.healCooldown -= dt;
+            if (this.healCooldown <= 0) {
+                this.healCooldown = 2.5;
+                const allies = spatialGrid.queryRadius(this.x, this.y, this.data.healRadius || 150);
+                for (const a of allies) {
+                    if (a.hp < a.maxHp) {
+                        a.hp = Math.min(a.maxHp, a.hp + 25);
+                        if (particleSystem) {
+                            particleSystem.add({
+                                x: a.x,
+                                y: a.y - 10,
+                                vy: -40,
+                                color: '#00fa9a',
+                                radius: 4,
+                                shape: 'cross',
+                                lifetime: 0.5
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
         // Move towards player
         let dx = playerX - this.x;
         let dy = playerY - this.y;
 
         if (this.data.erratic) {
-            this.erraticTimer += dt * 3;
-            dx += Math.cos(this.erraticTimer) * 50;
-            dy += Math.sin(this.erraticTimer) * 50;
+            this.erraticTimer += dt * 3.5;
+            dx += Math.cos(this.erraticTimer) * 55;
+            dy += Math.sin(this.erraticTimer) * 55;
         }
 
         const dist = Math.hypot(dx, dy) || 1;
@@ -272,8 +462,7 @@ class Projectile {
         this.knockback = config.knockback || 4;
         this.isCrit = config.isCrit || false;
 
-        // Special parameters for types
-        this.behavior = config.behavior || 'straight'; // 'straight', 'arc', 'boomerang', 'orbit', 'strike_area', 'aura', 'slash'
+        this.behavior = config.behavior || 'straight';
         this.originX = config.originX || config.x;
         this.originY = config.originY || config.y;
         this.targetX = config.targetX;
@@ -281,6 +470,7 @@ class Projectile {
         this.orbitRadius = config.orbitRadius || 80;
         this.orbitAngle = config.orbitAngle || 0;
         this.orbitSpeed = config.orbitSpeed || 3.0;
+        this.instantKillChance = config.instantKillChance || 0;
 
         this.hasReturned = false;
         this.dead = false;
@@ -300,18 +490,15 @@ class Projectile {
             this.y += this.vy * dt;
 
         } else if (this.behavior === 'slash') {
-            // Locks relative to player
             this.x = playerX + this.vx;
             this.y = playerY + this.vy;
 
         } else if (this.behavior === 'arc') {
-            // High throw with gravity
             this.x += this.vx * dt;
             this.y += this.vy * dt;
-            this.vy += 850 * dt; // Gravity
+            this.vy += 850 * dt;
 
         } else if (this.behavior === 'boomerang') {
-            // Moves forward, decelerates, then speeds back toward player
             if (!this.hasReturned) {
                 this.x += this.vx * dt;
                 this.y += this.vy * dt;
@@ -324,9 +511,8 @@ class Projectile {
                 const dx = playerX - this.x;
                 const dy = playerY - this.y;
                 const dist = Math.hypot(dx, dy) || 1;
-                this.x += (dx / dist) * 450 * dt;
-                this.y += (dy / dist) * 450 * dt;
-                // If it reached player on return
+                this.x += (dx / dist) * 480 * dt;
+                this.y += (dy / dist) * 480 * dt;
                 if (dist < 25) {
                     this.dead = true;
                 }
@@ -367,12 +553,12 @@ class ExpGem {
         }
 
         if (this.beingPulled) {
-            this.speed += 900 * dt;
+            this.speed += 950 * dt;
             this.x += (dx / dist) * this.speed * dt;
             this.y += (dy / dist) * this.speed * dt;
-            if (dist < 20) {
+            if (dist < 22) {
                 this.dead = true;
-                return true; // Picked up!
+                return true;
             }
         }
         return false;
@@ -383,13 +569,13 @@ class Chest {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.radius = 18;
+        this.radius = 20;
         this.dead = false;
     }
 
     checkPickup(playerX, playerY) {
         const dist = Math.hypot(this.x - playerX, this.y - playerY);
-        return dist < this.radius + 16;
+        return dist < this.radius + 18;
     }
 }
 
@@ -401,20 +587,21 @@ class FloatingText {
         this.color = color;
         this.isCrit = isCrit;
         this.isEvo = isEvo;
-        this.lifetime = 0.8;
+        this.lifetime = 0.85;
         this.timer = 0;
         this.dead = false;
     }
 
     update(dt) {
         this.timer += dt;
-        this.y -= 35 * dt;
+        this.y -= 38 * dt;
         if (this.timer >= this.lifetime) {
             this.dead = true;
         }
     }
 }
 
+window.ParticleSystem = ParticleSystem;
 window.Player = Player;
 window.Enemy = Enemy;
 window.Projectile = Projectile;

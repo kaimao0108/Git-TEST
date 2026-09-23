@@ -1,4 +1,4 @@
-// Game Orchestrator & State Machine
+// Game Orchestrator & State Machine (30 Minutes Deluxe Edition)
 
 class Game {
     constructor() {
@@ -7,8 +7,9 @@ class Game {
         this.renderer = new GameRenderer(this.canvas, this.ctx);
         this.ui = new UIController();
         this.grid = new SpatialGrid(96);
+        this.particles = new ParticleSystem();
 
-        this.state = 'INIT'; // 'INIT', 'SELECT_CHAR', 'PLAYING', 'LEVEL_UP', 'CHEST_OPEN', 'PAUSED', 'GAME_OVER', 'VICTORY'
+        this.state = 'INIT';
         this.gameTime = 0;
         this.lastFrameTime = performance.now();
 
@@ -20,6 +21,7 @@ class Game {
         this.floatingTexts = [];
 
         this.camera = { x: 0, y: 0 };
+        this.screenShake = 0;
         this.nextEnemyId = 1;
         this.enemySpawnTimer = 0;
         this.announcedWaves = new Set();
@@ -43,7 +45,6 @@ class Game {
     }
 
     initInputListeners() {
-        // Keyboard
         window.addEventListener('keydown', e => {
             this.keys[e.key.toLowerCase()] = true;
             if (e.key === 'p' || e.key === 'Escape') {
@@ -147,15 +148,17 @@ class Game {
         this.gems = [];
         this.chests = [];
         this.floatingTexts = [];
+        this.particles = new ParticleSystem();
         this.gameTime = 0;
         this.enemySpawnTimer = 0;
         this.announcedWaves.clear();
+        this.screenShake = 0;
 
         this.state = 'PLAYING';
         this.lastFrameTime = performance.now();
-        window.soundFx.startBgm();
+        window.soundFx.switchToField();
 
-        this.ui.showBanner(`⚔️ 冒險啟程！勇者【${this.player.character.name}】踏上討伐魔物之途！`);
+        this.ui.showBanner(`⚔️ 冒險啟程！勇者【${this.player.character.name}】踏上 30 分鐘討伐魔王壯烈史詩！`);
     }
 
     togglePause() {
@@ -166,6 +169,10 @@ class Game {
                 this.lastFrameTime = performance.now();
             });
         }
+    }
+
+    addScreenShake(intensity) {
+        this.screenShake = Math.min(25, this.screenShake + intensity);
     }
 
     getInputDirection() {
@@ -211,9 +218,14 @@ class Game {
     update(dt) {
         this.gameTime += dt;
 
-        // 1. Player Update
+        // Screen Shake decay
+        if (this.screenShake > 0) {
+            this.screenShake = Math.max(0, this.screenShake - dt * 25);
+        }
+
+        // 1. Player Update (8-direction & particle dust)
         const inputDir = this.getInputDirection();
-        this.player.update(dt, inputDir);
+        this.player.update(dt, inputDir, this.particles);
 
         // Update Camera centered on player
         this.camera.x = this.player.x - this.canvas.width / 2;
@@ -237,10 +249,19 @@ class Game {
         // 6. Update Enemies AI & Player Damage
         this.updateEnemies(dt);
 
-        // 7. Update Exp Gems & Chests
+        // 7. Dynamic BGM Transition (Field <-> BOSS Battle Theme)
+        const hasBoss = this.enemies.some(e => e.data.isBoss);
+        if (hasBoss) {
+            window.soundFx.switchToBoss();
+        } else {
+            window.soundFx.switchToField();
+        }
+
+        // 8. Update Exp Gems & Chests
         this.updatePickups(dt);
 
-        // 8. Update Floating Damage Numbers
+        // 9. Update Particles & Floating Text
+        this.particles.update(dt);
         for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
             this.floatingTexts[i].update(dt);
             if (this.floatingTexts[i].dead) {
@@ -248,10 +269,10 @@ class Game {
             }
         }
 
-        // 9. Update UI HUD
+        // 10. Update UI HUD
         this.ui.updateHUD(this.player, this.gameTime);
 
-        // 10. Check Player Death
+        // 11. Check Player Death
         if (this.player.hp <= 0) {
             this.state = 'GAME_OVER';
             window.soundFx.stopBgm();
@@ -261,7 +282,7 @@ class Game {
         }
     }
 
-    // --- Weapons Logic ---
+    // --- Weapons Logic (8-Directional Precision) ---
     updateWeapons(dt) {
         const p = this.player;
 
@@ -273,6 +294,21 @@ class Game {
         }
     }
 
+    getPlayerAimAngle() {
+        // Map 8-direction index to angle: 0:S, 1:SE, 2:E, 3:NE, 4:N, 5:NW, 6:W, 7:SW
+        const angles = [
+            Math.PI / 2,        // 0: South (Down)
+            Math.PI / 4,        // 1: South-East
+            0,                  // 2: East (Right)
+            -Math.PI / 4,       // 3: North-East
+            -Math.PI / 2,       // 4: North (Up)
+            -Math.PI * 3 / 4,   // 5: North-West
+            Math.PI,            // 6: West (Left)
+            Math.PI * 3 / 4     // 7: South-West
+        ];
+        return angles[this.player.dirIndex % 8];
+    }
+
     fireWeapon(weaponSlot) {
         const p = this.player;
         const wId = weaponSlot.id;
@@ -281,7 +317,6 @@ class Game {
         const lvl = weaponSlot.level;
         const lvlData = isEvo ? data : data.levels[lvl - 1];
 
-        // Base stats calculation
         const baseDmg = isEvo ? data.damage : lvlData.damage;
         const damage = baseDmg * p.might;
         const cd = (isEvo ? data.cooldown : lvlData.cooldown) * p.cooldownMod;
@@ -289,80 +324,81 @@ class Game {
         const isCrit = Math.random() < (isEvo && data.critChance ? data.critChance : p.critChance);
         const critMult = isEvo && data.critMultiplier ? data.critMultiplier : 2.0;
         const finalDmg = isCrit ? damage * critMult : damage;
+        const aimAngle = this.getPlayerAimAngle();
 
-        weaponSlot.timer = Math.max(0.12, cd);
+        weaponSlot.timer = Math.max(0.1, cd);
 
-        // --- 1. Sword Loto / True Loto Blade ---
+        // 1. Sword Loto / True Loto Blade (8-Directional Slash)
         if (wId === 'sword_loto' || wId === 'true_loto_blade') {
             window.soundFx.playSlash();
             const slashR = (isEvo ? data.area : lvlData.area) * p.areaMod;
+            const forwardX = Math.cos(aimAngle) * 30;
+            const forwardY = Math.sin(aimAngle) * 30;
 
-            // Facing slash
+            // Primary slash in aim direction
             this.projectiles.push(new Projectile({
                 weaponId: wId,
                 behavior: 'slash',
-                x: p.x + p.facing * 25,
-                y: p.y,
-                vx: p.facing * 25,
-                vy: 0,
+                x: p.x + forwardX,
+                y: p.y + forwardY,
+                vx: forwardX,
+                vy: forwardY,
                 radius: slashR,
                 damage: finalDmg,
                 lifetime: 0.18,
-                angle: p.facing === 1 ? 0 : Math.PI,
+                angle: aimAngle,
                 knockback: 10,
                 isCrit
             }));
 
-            // Opposite / multi slashes
+            // Backward slash
             if (count >= 2 || isEvo) {
                 this.projectiles.push(new Projectile({
                     weaponId: wId,
                     behavior: 'slash',
-                    x: p.x - p.facing * 25,
-                    y: p.y,
-                    vx: -p.facing * 25,
-                    vy: 0,
+                    x: p.x - forwardX,
+                    y: p.y - forwardY,
+                    vx: -forwardX,
+                    vy: -forwardY,
                     radius: slashR * 0.9,
                     damage: finalDmg,
                     lifetime: 0.18,
-                    angle: p.facing === 1 ? Math.PI : 0,
+                    angle: aimAngle + Math.PI,
                     knockback: 10,
                     isCrit
                 }));
             }
 
-            // True Loto Blade Golden Cross Waves!
+            // True Loto Blade: 4-Way Holy Cross Beams + Particles!
             if (isEvo) {
-                const angles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
+                this.addScreenShake(3);
+                const angles = [aimAngle, aimAngle + Math.PI / 2, aimAngle + Math.PI, aimAngle + Math.PI * 1.5];
                 angles.forEach(ang => {
                     this.projectiles.push(new Projectile({
                         weaponId: wId,
                         behavior: 'straight',
                         x: p.x,
                         y: p.y,
-                        vx: Math.cos(ang) * 450,
-                        vy: Math.sin(ang) * 450,
-                        radius: 35,
-                        damage: finalDmg * 0.8,
-                        lifetime: 1.2,
+                        vx: Math.cos(ang) * 500,
+                        vy: Math.sin(ang) * 500,
+                        radius: 38,
+                        damage: finalDmg * 0.85,
+                        lifetime: 1.25,
                         pierce: 999,
                         isCrit: true
                     }));
                 });
+                this.particles.burst(p.x, p.y, 16, '#ffd700', 160, 'star');
             }
 
-        // --- 2. Wand Frizz / Wand Kafrizz ---
+        // 2. Wand Frizz / Wand Kafrizz
         } else if (wId === 'wand_frizz' || wId === 'wand_kafrizz') {
             window.soundFx.playMagic();
             for (let i = 0; i < count; i++) {
                 setTimeout(() => {
                     if (this.state !== 'PLAYING') return;
                     const target = this.grid.queryClosest(p.x, p.y, 650);
-                    let angle = Math.random() * Math.PI * 2;
-                    if (target) {
-                        angle = Math.atan2(target.y - p.y, target.x - p.x);
-                    }
-                    // Spread slightly
+                    let angle = target ? Math.atan2(target.y - p.y, target.x - p.x) : aimAngle;
                     angle += (Math.random() - 0.5) * 0.35;
                     const speed = isEvo ? data.speed : data.speed;
 
@@ -379,15 +415,14 @@ class Game {
                         pierce: isEvo ? data.pierce : 1,
                         isCrit
                     }));
-                }, i * 65);
+                }, i * 60);
             }
 
-        // --- 3. Dagger Poison / Thousand Needles ---
+        // 3. Dagger Poison / Thousand Needles (8-Directional Fan)
         } else if (wId === 'dagger_poison' || wId === 'thousand_needles') {
             window.soundFx.playSlash();
-            const baseAngle = p.facing === 1 ? 0 : Math.PI;
-            const spread = 0.14;
-            const startAngle = baseAngle - ((count - 1) * spread) / 2;
+            const spread = 0.12;
+            const startAngle = aimAngle - ((count - 1) * spread) / 2;
 
             for (let i = 0; i < count; i++) {
                 const angle = startAngle + i * spread;
@@ -409,11 +444,11 @@ class Game {
                 }));
             }
 
-        // --- 4. Axe Battle / Death Scythe ---
+        // 4. Axe Battle / Death Scythe
         } else if (wId === 'axe_battle' || wId === 'death_scythe') {
             window.soundFx.playSlash();
             if (isEvo) {
-                // 360 degree explosion of scythes
+                this.addScreenShake(4);
                 const totalScythes = 8 + p.amountBonus;
                 for (let i = 0; i < totalScythes; i++) {
                     const ang = (i * Math.PI * 2) / totalScythes;
@@ -425,18 +460,18 @@ class Game {
                         vx: Math.cos(ang) * data.speed,
                         vy: Math.sin(ang) * data.speed,
                         rotSpeed: 14,
-                        radius: 24,
+                        radius: 26,
                         damage: finalDmg,
                         lifetime: 2.6,
                         pierce: 999,
                         isCrit
                     }));
                 }
+                this.particles.burst(p.x, p.y, 20, '#9d4edd', 180, 'spark');
             } else {
-                // Tossed upward in high arc
                 for (let i = 0; i < count; i++) {
-                    const vx = (p.facing * (160 + i * 40)) + (Math.random() - 0.5) * 80;
-                    const vy = -460 - (Math.random() * 80);
+                    const vx = (Math.cos(aimAngle) * (180 + i * 40)) + (Math.random() - 0.5) * 80;
+                    const vy = -480 - (Math.random() * 80);
                     this.projectiles.push(new Projectile({
                         weaponId: wId,
                         behavior: 'arc',
@@ -454,11 +489,11 @@ class Game {
                 }
             }
 
-        // --- 5. Boomerang / Sacred Boomerang ---
+        // 5. Boomerang / Sacred Boomerang (8-Directional Throw)
         } else if (wId === 'boomerang' || wId === 'sacred_boomerang') {
             window.soundFx.playBoomerang();
             for (let i = 0; i < count; i++) {
-                const angle = (p.facing === 1 ? 0 : Math.PI) + (i - (count - 1) / 2) * 0.35;
+                const angle = aimAngle + (i - (count - 1) / 2) * 0.32;
                 const speed = isEvo ? data.speed : data.speed;
                 this.projectiles.push(new Projectile({
                     weaponId: wId,
@@ -468,7 +503,7 @@ class Game {
                     vx: Math.cos(angle) * speed,
                     vy: Math.sin(angle) * speed,
                     rotSpeed: 18,
-                    radius: isEvo ? 20 : 14,
+                    radius: isEvo ? 22 : 15,
                     damage: finalDmg,
                     lifetime: 2.4,
                     pierce: 999,
@@ -476,13 +511,11 @@ class Game {
                 }));
             }
 
-        // --- 6. Tome Sizz / Kasizz Halo ---
+        // 6. Tome Sizz / Kasizz Halo
         } else if (wId === 'tome_sizz' || wId === 'halo_kasizz') {
-            // Remove old orbiting tomes for clean reset
             this.projectiles = this.projectiles.filter(pr => pr.weaponId !== wId);
-
             const duration = (isEvo ? 999999 : lvlData.duration) * p.durationMod;
-            const orbitR = 90 * p.areaMod;
+            const orbitR = 95 * p.areaMod;
             const orbSpeed = isEvo ? data.orbitSpeed : data.orbitSpeed;
 
             for (let i = 0; i < count; i++) {
@@ -496,7 +529,7 @@ class Game {
                     orbitRadius: orbitR,
                     orbitSpeed: orbSpeed,
                     rotSpeed: 8,
-                    radius: isEvo ? 18 : 12,
+                    radius: isEvo ? 20 : 13,
                     damage: finalDmg,
                     lifetime: duration,
                     pierce: 999,
@@ -505,17 +538,17 @@ class Game {
                 }));
             }
 
-        // --- 7. Wand Bang / Wrath Kaboom ---
+        // 7. Wand Bang / Wrath Kaboom
         } else if (wId === 'wand_bang' || wId === 'wrath_kaboom') {
             window.soundFx.playExplosion();
+            this.addScreenShake(isEvo ? 6 : 3);
             const radius = (isEvo ? data.radius : lvlData.radius) * p.areaMod;
 
             for (let i = 0; i < count; i++) {
-                // Find target or random spot around player
-                const nearby = this.grid.queryRadius(p.x, p.y, 450);
+                const nearby = this.grid.queryRadius(p.x, p.y, 480);
                 let targetPos = {
-                    x: p.x + (Math.random() - 0.5) * 500,
-                    y: p.y + (Math.random() - 0.5) * 500
+                    x: p.x + (Math.random() - 0.5) * 520,
+                    y: p.y + (Math.random() - 0.5) * 520
                 };
                 if (nearby.length > 0) {
                     const picked = nearby[Math.floor(Math.random() * nearby.length)];
@@ -534,15 +567,15 @@ class Game {
                     pierce: 999,
                     isCrit
                 }));
+                this.particles.burst(targetPos.x, targetPos.y, 14, isEvo ? '#ff0055' : '#ffaa00', 140, 'spark');
             }
 
-        // --- 8. Aura Herb / Domain Yggdrasil ---
+        // 8. Aura Herb / Domain Yggdrasil
         } else if (wId === 'aura_herb' || wId === 'domain_yggdrasil') {
             const radius = (isEvo ? data.radius : lvlData.radius) * p.areaMod;
             const tickRate = isEvo ? data.tickRate : lvlData.tickRate;
             weaponSlot.timer = tickRate;
 
-            // Damage all enemies in radius immediately
             const inRange = this.grid.queryRadius(p.x, p.y, radius);
             for (const enemy of inRange) {
                 const dealt = enemy.takeDamage(finalDmg, 3, p.x, p.y);
@@ -554,7 +587,6 @@ class Game {
                 }
             }
 
-            // Create visual pulse projectile
             this.projectiles.push(new Projectile({
                 weaponId: wId,
                 behavior: 'aura',
@@ -565,24 +597,34 @@ class Game {
                 lifetime: 0.25,
                 pierce: 999
             }));
+
+            // Floating green leaves for Yggdrasil
+            if (isEvo && Math.random() < 0.4) {
+                this.particles.add({
+                    x: p.x + (Math.random() * radius - radius / 2),
+                    y: p.y + (Math.random() * radius - radius / 2),
+                    vy: -25,
+                    color: '#2ecc71',
+                    radius: 3,
+                    shape: 'leaf',
+                    lifetime: 0.8
+                });
+            }
         }
     }
 
-    // --- Enemy Spawning & Waves ---
+    // --- Enemy Spawning & Waves (30 Minutes Engine) ---
     updateSpawner(dt) {
         this.enemySpawnTimer += dt;
 
-        // Find current wave
         let currentWave = GAME_DATA.waves[0];
         for (let i = 0; i < GAME_DATA.waves.length; i++) {
             const w = GAME_DATA.waves[i];
             if (this.gameTime >= w.startTime && this.gameTime < w.endTime) {
                 currentWave = w;
-                // Announce wave banner if present
                 if (w.announce && !this.announcedWaves.has(i)) {
                     this.announcedWaves.add(i);
-                    this.ui.showBanner(w.announce, 4500);
-                    // Spawn boss immediately
+                    this.ui.showBanner(w.announce, 5000);
                     if (w.boss) {
                         this.spawnEnemy(w.boss, true);
                     }
@@ -591,24 +633,26 @@ class Game {
             }
         }
 
-        // Normal enemy wave spawns
-        const interval = currentWave.spawnInterval || 0.6;
-        const maxActive = currentWave.maxActive || 100;
+        const interval = currentWave.spawnInterval || 0.5;
+        const maxActive = currentWave.maxActive || 120;
 
         if (this.enemySpawnTimer >= interval && this.enemies.length < maxActive && currentWave.enemies) {
             this.enemySpawnTimer = 0;
             const enemyType = currentWave.enemies[Math.floor(Math.random() * currentWave.enemies.length)];
             this.spawnEnemy(enemyType);
 
-            // Metal Slime rare chance!
+            // Rare metal spawns
             if (currentWave.special === 'metal_slime_chance' && Math.random() < 0.05) {
                 this.spawnEnemy('metal_slime');
+            } else if (currentWave.special === 'liquid_metal_chance' && Math.random() < 0.04) {
+                this.spawnEnemy('liquid_metal_slime');
+            } else if (currentWave.special === 'king_metal_chance' && Math.random() < 0.02) {
+                this.spawnEnemy('king_metal_slime');
             }
         }
     }
 
     spawnEnemy(type, isBoss = false) {
-        // Spawn in a ring around the camera viewport
         const angle = Math.random() * Math.PI * 2;
         const dist = Math.max(this.canvas.width, this.canvas.height) * 0.65 + (Math.random() * 80);
         const x = this.player.x + Math.cos(angle) * dist;
@@ -616,6 +660,10 @@ class Game {
 
         const enemy = new Enemy(this.nextEnemyId++, type, x, y);
         this.enemies.push(enemy);
+
+        if (isBoss) {
+            this.addScreenShake(8);
+        }
     }
 
     // --- Projectile Physics & Collisions ---
@@ -626,7 +674,6 @@ class Game {
             const proj = this.projectiles[i];
             proj.update(dt, p.x, p.y);
 
-            // Collide with enemies via spatial grid
             if (proj.damage > 0 && !proj.dead) {
                 const candidates = this.grid.queryRadius(proj.x, proj.y, proj.radius + 18);
 
@@ -634,26 +681,32 @@ class Game {
                     const enemy = candidates[j];
                     if (proj.hitEnemies.has(enemy.id)) continue;
 
-                    // Hit!
                     proj.hitEnemies.add(enemy.id);
 
-                    // Check instant-kill chance for Thousand Needles
+                    // Check instant-kill
                     let dmgToDeal = proj.damage;
                     let isInstantKill = false;
                     if (proj.instantKillChance && Math.random() < proj.instantKillChance && !enemy.data.isBoss) {
                         dmgToDeal = enemy.hp + 999;
                         isInstantKill = true;
+                        window.soundFx.playInstantKill();
+                        this.particles.burst(enemy.x, enemy.y, 20, '#ff0055', 200, 'spark');
                     }
 
                     const dealt = enemy.takeDamage(dmgToDeal, proj.knockback, proj.x, proj.y);
                     p.damageDealt += dealt;
 
-                    // True Loto Blade lifesteal on crit
-                    if (proj.weaponId === 'true_loto_blade' && proj.isCrit) {
-                        p.heal(2);
+                    if (proj.isCrit) {
+                        window.soundFx.playCritical();
+                        this.particles.burst(enemy.x, enemy.y, 8, '#ffd700', 120, 'star');
                     }
 
-                    // Floating text
+                    // True Loto Blade lifesteal on crit
+                    if (proj.weaponId === 'true_loto_blade' && proj.isCrit) {
+                        p.heal(3);
+                        this.particles.add({ x: p.x, y: p.y - 12, vy: -30, color: '#00ffff', radius: 4, shape: 'cross', lifetime: 0.5 });
+                    }
+
                     const txt = isInstantKill ? '即死!!' : dealt;
                     this.floatingTexts.push(new FloatingText(enemy.x, enemy.y, txt, proj.isCrit ? '#ffd700' : '#ffffff', proj.isCrit));
 
@@ -677,13 +730,14 @@ class Game {
 
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const enemy = this.enemies[i];
-            enemy.update(dt, p.x, p.y);
+            enemy.update(dt, p.x, p.y, this.grid, this.particles);
 
             // Player contact damage
             const dist = Math.hypot(p.x - enemy.x, p.y - enemy.y);
             if (dist < p.radius + enemy.radius) {
                 const hurt = p.takeDamage(enemy.damage);
                 if (hurt > 0) {
+                    this.addScreenShake(4);
                     this.floatingTexts.push(new FloatingText(p.x, p.y, `-${hurt}`, '#e63946'));
                 }
             }
@@ -693,15 +747,18 @@ class Game {
                 p.kills++;
                 p.coins += Math.floor(enemy.data.points / 10);
 
+                // Death burst particles
+                this.particles.burst(enemy.x, enemy.y, enemy.data.isBoss ? 24 : 8, enemy.data.color, 100);
+
                 // Drop Exp Gem
                 this.gems.push(new ExpGem(enemy.x, enemy.y, enemy.data.exp));
 
-                // Drop Chest if boss / miniboss
+                // Drop Chest if boss
                 if (enemy.data.chestDrop) {
                     this.chests.push(new Chest(enemy.x, enemy.y));
                 }
 
-                // Check Victory condition (Dragonlord defeated!)
+                // Check Victory condition (Zoma defeated at 30:00!)
                 if (enemy.data.isFinalBoss) {
                     this.state = 'VICTORY';
                     window.soundFx.stopBgm();
@@ -824,7 +881,7 @@ class Game {
             }
         }
 
-        // Fallback: Coin bag if everything is maxed
+        // Fallback
         if (options.length === 0) {
             options.push({
                 type: 'coin_bag',
@@ -836,7 +893,6 @@ class Game {
             });
         }
 
-        // Shuffle and pick 3-4 options
         const shuffled = options.sort(() => 0.5 - Math.random());
         const chosenCards = shuffled.slice(0, Math.min(3, shuffled.length));
 
@@ -863,13 +919,9 @@ class Game {
         this.state = 'CHEST_OPEN';
         const p = this.player;
 
-        // Check if player qualifies for Super Evolution!
-        // Condition: Base weapon is MAX level (Lv 8), NOT yet evolved, AND player possesses required passive accessory!
         let evoFound = null;
-
         for (const w of p.weapons) {
             if (!w.isEvolved && w.level >= 8) {
-                // Find evolution recipe
                 for (const [evoId, evoData] of Object.entries(GAME_DATA.evolutions)) {
                     if (evoData.baseWeapon === w.id) {
                         const hasPassive = p.passives.some(pass => pass.id === evoData.requiredPassive);
@@ -889,9 +941,9 @@ class Game {
         }
 
         if (evoFound) {
-            // Evolve weapon!
             p.evolveWeapon(evoFound.baseWeaponId, evoFound.evoId);
             this.floatingTexts.push(new FloatingText(p.x, p.y, 'SUPER EVOLUTION!!', '#ff00ff', true, true));
+            this.addScreenShake(12);
 
             this.ui.showChest({
                 type: 'evolution',
@@ -904,7 +956,7 @@ class Game {
             return;
         }
 
-        // Otherwise: upgrade a random weapon or passive in inventory
+        // Regular upgrade
         const upgradeCandidates = [];
         for (const w of p.weapons) {
             if (!w.isEvolved && w.level < GAME_DATA.weapons[w.id].maxLevel) {
@@ -943,7 +995,6 @@ class Game {
                 this.lastFrameTime = performance.now();
             });
         } else {
-            // Everything maxed: Give 250 coins
             p.coins += 250;
             this.ui.showChest({
                 type: 'coins',
@@ -955,17 +1006,28 @@ class Game {
         }
     }
 
-    // --- Render System ---
+    // --- Render System (With Screen Shake) ---
     render(animTime) {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         if (!this.player) return;
 
+        // Apply Screen Shake offset
+        let shakeX = 0;
+        let shakeY = 0;
+        if (this.screenShake > 0) {
+            shakeX = (Math.random() - 0.5) * this.screenShake;
+            shakeY = (Math.random() - 0.5) * this.screenShake;
+        }
+
+        const renderCamX = this.camera.x + shakeX;
+        const renderCamY = this.camera.y + shakeY;
+
         // 1. Draw Map Tile Background
-        this.renderer.renderBackground(this.camera.x, this.camera.y, this.canvas.width, this.canvas.height);
+        this.renderer.renderBackground(renderCamX, renderCamY, this.canvas.width, this.canvas.height);
 
         this.ctx.save();
-        this.ctx.translate(-this.camera.x, -this.camera.y);
+        this.ctx.translate(-renderCamX, -renderCamY);
 
         // 2. Draw Exp Gems
         for (const gem of this.gems) {
@@ -982,7 +1044,7 @@ class Game {
             this.renderer.drawEnemy(enemy, animTime);
         }
 
-        // 5. Draw Player
+        // 5. Draw Player (8-Directional)
         this.renderer.drawPlayer(this.player, animTime);
 
         // 6. Draw Projectiles & Weapon VFX
@@ -990,7 +1052,10 @@ class Game {
             this.renderer.drawProjectile(proj, animTime);
         }
 
-        // 7. Draw Floating Damage Numbers
+        // 7. Draw Particle Effects (Sparks, Embers, Shockwaves)
+        this.particles.render(this.ctx);
+
+        // 8. Draw Floating Damage Numbers
         for (const fText of this.floatingTexts) {
             this.renderer.drawFloatingText(fText);
         }
