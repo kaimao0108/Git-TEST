@@ -17,7 +17,9 @@ window.addEventListener('DOMContentLoaded', () => {
         }
         window.removeEventListener('click', unlockAudio);
         window.removeEventListener('keydown', unlockAudio);
+        window.removeEventListener('touchstart', unlockAudio);
     };
     window.addEventListener('click', unlockAudio);
     window.addEventListener('keydown', unlockAudio);
+    window.addEventListener('touchstart', unlockAudio);
 });

@@ -767,12 +767,14 @@ const GAME_DATA = {
 
     // 30 分鐘完整波次進程表 (00:00 - 30:00)
     waves: [
-        // 00:00 - 02:00: 新手期
-        { startTime: 0, endTime: 120, enemies: ['slime', 'bubble_slime'], spawnInterval: 0.7, maxActive: 70 },
-        // 02:00 - 04:00: 飛行朵拉奇與治療荷伊米史萊姆
-        { startTime: 120, endTime: 240, enemies: ['slime', 'dracky', 'healslime'], spawnInterval: 0.55, maxActive: 95 },
-        // 04:00 - 05:00: 大木槌與鬼魂推進
-        { startTime: 240, endTime: 300, enemies: ['bubble_slime', 'hammerhood', 'ghost'], spawnInterval: 0.45, maxActive: 120 },
+        // 00:00 - 01:20: 新手期
+        { startTime: 0, endTime: 80, enemies: ['slime', 'bubble_slime'], spawnInterval: 0.7, maxActive: 70 },
+        // 01:20 (80s): 前哨 BOSS 史萊姆騎士 (第一時間體驗 DQ BOSS 戰鬥曲！)
+        { startTime: 80, endTime: 85, boss: 'slime_knight', announce: '⚔️ 遭遇強敵！【史萊姆騎士】突襲現身！BOSS 戰鬥展開！' },
+        // 01:25 - 03:00: 飛行朵拉奇與治療荷伊米史萊姆
+        { startTime: 85, endTime: 180, enemies: ['slime', 'dracky', 'healslime'], spawnInterval: 0.55, maxActive: 95 },
+        // 03:00 - 05:00: 大木槌與鬼魂推進
+        { startTime: 180, endTime: 300, enemies: ['bubble_slime', 'hammerhood', 'ghost'], spawnInterval: 0.45, maxActive: 120 },
 
         // 05:00 (300s): BOSS 1 史萊姆騎士
         { startTime: 300, endTime: 305, boss: 'slime_knight', announce: '⚔️ 警告！史萊姆騎士 降臨！BOSS 戰鬥展開！' },

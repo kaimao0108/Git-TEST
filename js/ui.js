@@ -15,6 +15,7 @@ class UIController {
             passiveSlots: document.getElementById('passive-slots'),
             waveBanner: document.getElementById('wave-banner'),
             soundToggle: document.getElementById('sound-toggle'),
+            bgmIndicator: document.getElementById('bgm-indicator'),
             btnPause: document.getElementById('btn-pause'),
 
             // Modals
@@ -32,6 +33,8 @@ class UIController {
 
             modalPause: document.getElementById('modal-pause'),
             pauseStatsTable: document.getElementById('pause-stats-table'),
+            btnPauseField: document.getElementById('btn-pause-field'),
+            btnPauseBoss: document.getElementById('btn-pause-boss'),
             btnResume: document.getElementById('btn-resume'),
 
             modalGameOver: document.getElementById('modal-game-over'),
@@ -71,7 +74,40 @@ class UIController {
         this.dom.soundToggle.addEventListener('click', () => {
             const on = window.soundFx.toggle();
             this.dom.soundToggle.textContent = on ? '🔊' : '🔇';
+            if (this.dom.bgmIndicator) {
+                this.dom.bgmIndicator.style.opacity = on ? '1' : '0.4';
+            }
         });
+
+        if (this.dom.bgmIndicator) {
+            this.dom.bgmIndicator.addEventListener('click', () => {
+                window.soundFx.playSelect();
+                if (window.soundFx.currentTrack === 'boss') {
+                    window.soundFx.switchToField();
+                } else {
+                    window.soundFx.switchToBoss();
+                }
+            });
+
+            window.soundFx.onTrackChange = (track) => {
+                this.updateBgmIndicator(track);
+            };
+        }
+    }
+
+    updateBgmIndicator(track) {
+        if (!this.dom.bgmIndicator) return;
+        if (track === 'boss') {
+            this.dom.bgmIndicator.textContent = '⚔️ DQ BOSS戰【勇者的挑戰】';
+            this.dom.bgmIndicator.style.borderColor = '#ff4444';
+            this.dom.bgmIndicator.style.color = '#ff6666';
+            this.dom.bgmIndicator.style.boxShadow = '0 0 10px rgba(255, 68, 68, 0.5)';
+        } else {
+            this.dom.bgmIndicator.textContent = '🌲 DQ 原野【冒險的旅程】';
+            this.dom.bgmIndicator.style.borderColor = '#ffd700';
+            this.dom.bgmIndicator.style.color = '#ffd700';
+            this.dom.bgmIndicator.style.boxShadow = '0 0 10px rgba(255, 215, 0, 0.35)';
+        }
     }
 
     updateHUD(player, gameTime) {
@@ -252,6 +288,20 @@ class UIController {
             <tr><td>暴擊機率</td><td>${Math.round(player.critChance * 100)}%</td></tr>
             <tr><td>磁吸範圍</td><td>${Math.round(player.pickupRange)}</td></tr>
         `;
+
+        if (this.dom.btnPauseField) {
+            this.dom.btnPauseField.onclick = () => {
+                window.soundFx.playSelect();
+                window.soundFx.switchToField();
+            };
+        }
+
+        if (this.dom.btnPauseBoss) {
+            this.dom.btnPauseBoss.onclick = () => {
+                window.soundFx.playSelect();
+                window.soundFx.switchToBoss();
+            };
+        }
 
         this.dom.btnResume.onclick = () => {
             window.soundFx.playSelect();
