@@ -98,12 +98,12 @@ class UIController {
     updateBgmIndicator(track) {
         if (!this.dom.bgmIndicator) return;
         if (track === 'boss') {
-            this.dom.bgmIndicator.textContent = '⚔️ DQ BOSS戰【勇者的挑戰】';
+            this.dom.bgmIndicator.textContent = '⚔️ DQ1 戰鬥曲【戦闘】';
             this.dom.bgmIndicator.style.borderColor = '#ff4444';
             this.dom.bgmIndicator.style.color = '#ff6666';
             this.dom.bgmIndicator.style.boxShadow = '0 0 10px rgba(255, 68, 68, 0.5)';
         } else {
-            this.dom.bgmIndicator.textContent = '🌲 DQ 原野【冒險的旅程】';
+            this.dom.bgmIndicator.textContent = '🌲 DQ1 原野【広野を行く】';
             this.dom.bgmIndicator.style.borderColor = '#ffd700';
             this.dom.bgmIndicator.style.color = '#ffd700';
             this.dom.bgmIndicator.style.boxShadow = '0 0 10px rgba(255, 215, 0, 0.35)';

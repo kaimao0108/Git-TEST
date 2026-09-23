@@ -87,7 +87,7 @@ class GameRenderer {
     }
 
     // =========================================================================
-    // 2. CLEAR, SHARP, HIGH-DEFINITION 8-DIRECTION CHARACTERS (加強輪廓與細節)
+    // 2. CLEAR, SHARP, HIGH-DEFINITION 8-DIRECTION CHARACTERS (HD-2D 風格)
     // =========================================================================
 
     drawPlayer(player, animTime) {
@@ -106,10 +106,14 @@ class GameRenderer {
         const frame = player.walkFrame;
         const bob = isMoving ? (frame % 2 === 1 ? -3 : 0) : Math.sin(animTime * 3) * 1.0;
 
-        // Soft ground shadow
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+        // HD-2D Multi-layer Contact Shadow with Ambient Occlusion (真實接觸柔和陰影)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.20)';
         ctx.beginPath();
-        ctx.ellipse(0, 18, 16, 7, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 19, 18, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.beginPath();
+        ctx.ellipse(0, 18.5, 11, 4.5, 0, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.translate(0, bob);
@@ -118,9 +122,9 @@ class GameRenderer {
         const stepL = isMoving ? (frame === 1 ? 5 : (frame === 3 ? -4 : 0)) : 0;
         const stepR = isMoving ? (frame === 3 ? 5 : (frame === 1 ? -4 : 0)) : 0;
 
-        // Render with defined outline pass
+        // Render with defined outline pass & HD-2D volumetric lighting
         if (charId === 'hero') {
-            this.drawHeroHD(ctx, dir, stepL, stepR, isMoving, animTime);
+            this.drawHeroHD2D(ctx, dir, stepL, stepR, isMoving, animTime);
         } else if (charId === 'mage') {
             this.drawMageHD(ctx, dir, stepL, stepR, isMoving, animTime);
         } else if (charId === 'martial') {
@@ -132,185 +136,450 @@ class GameRenderer {
         ctx.restore();
     }
 
-    // --- 1. HERO HD (羅德傳奇勇者 - 飛翼頭盔、羅德之盾、神聖佩劍) ---
-    drawHeroHD(ctx, dir, stepL, stepR, isMoving, animTime) {
+    // --- 1. HERO HD-2D (一代傳說勇者 - 雙角蔚藍兜鍪、額前紅寶石、黃金肩鎧、羅德神劍與神盾) ---
+    drawHeroHD2D(ctx, dir, stepL, stepR, isMoving, animTime) {
         const isNorth = (dir === 4 || dir === 3 || dir === 5);
         const isSouth = (dir === 0 || dir === 1 || dir === 7);
         const isEast = (dir === 2 || dir === 1 || dir === 3);
         const isWest = (dir === 6 || dir === 5 || dir === 7);
 
-        // 1. Cape (Billowing Crimson Cape with folds)
-        const capeWave = isMoving ? Math.sin(animTime * 12) * 6 : Math.sin(animTime * 3) * 2;
+        // 1. Billowing Crimson Cloak (3D 立體深紅斗篷 - 隨風物理擺動與陰影折痕)
+        const capeWave = isMoving ? Math.sin(animTime * 10) * 5.5 : Math.sin(animTime * 3) * 1.8;
         if (!isNorth) {
-            ctx.fillStyle = '#0a0a0a'; // Dark Outline
+            // Dark Outline
+            ctx.fillStyle = '#060606';
             ctx.beginPath();
-            ctx.moveTo(-11, -5); ctx.lineTo(-19 - capeWave, 21); ctx.lineTo(19 + capeWave, 21); ctx.lineTo(11, -5);
-            ctx.closePath(); ctx.fill();
+            ctx.moveTo(-11, -5);
+            ctx.lineTo(-20 - capeWave, 21);
+            ctx.lineTo(20 + capeWave, 21);
+            ctx.lineTo(11, -5);
+            ctx.closePath();
+            ctx.fill();
 
-            // Rich Crimson Gradient Cape
+            // Rich Multi-Tone 3D Gradient Folds
             const capeGrad = ctx.createLinearGradient(0, -5, 0, 22);
-            capeGrad.addColorStop(0, '#9e0c1b'); capeGrad.addColorStop(1, '#e63946');
+            capeGrad.addColorStop(0, '#660708');
+            capeGrad.addColorStop(0.4, '#a4161a');
+            capeGrad.addColorStop(0.85, '#e5383b');
+            capeGrad.addColorStop(1, '#ba181b');
             ctx.fillStyle = capeGrad;
             ctx.beginPath();
-            ctx.moveTo(-9, -4); ctx.lineTo(-17 - capeWave, 19); ctx.lineTo(17 + capeWave, 19); ctx.lineTo(9, -4);
-            ctx.closePath(); ctx.fill();
+            ctx.moveTo(-9.5, -4);
+            ctx.lineTo(-18 - capeWave, 19.5);
+            ctx.lineTo(18 + capeWave, 19.5);
+            ctx.lineTo(9.5, -4);
+            ctx.closePath();
+            ctx.fill();
 
-            // Wavy Cape Creases
-            ctx.strokeStyle = '#780016'; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.moveTo(-6, -2); ctx.lineTo(-10 - capeWave * 0.6, 18); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(6, -2); ctx.lineTo(10 + capeWave * 0.6, 18); ctx.stroke();
+            // Dynamic Fabric Folds (斗篷光影皺褶)
+            ctx.strokeStyle = '#480007';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(-6, -3);
+            ctx.lineTo(-11 - capeWave * 0.7, 18);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(6, -3);
+            ctx.lineTo(11 + capeWave * 0.7, 18);
+            ctx.stroke();
+
+            // Fold Highlight Ridge (布料折線高光)
+            ctx.strokeStyle = '#ff758f';
+            ctx.lineWidth = 1.0;
+            ctx.beginPath();
+            ctx.moveTo(-4, -1);
+            ctx.lineTo(-8 - capeWave * 0.5, 17);
+            ctx.stroke();
+        } else {
+            // Full Back View Cape (背面完全覆蓋背部的猩紅大斗篷)
+            ctx.fillStyle = '#060606';
+            ctx.beginPath();
+            ctx.moveTo(-12, -7);
+            ctx.lineTo(-20 - capeWave, 22);
+            ctx.lineTo(20 + capeWave, 22);
+            ctx.lineTo(12, -7);
+            ctx.closePath();
+            ctx.fill();
+
+            const backCapeGrad = ctx.createLinearGradient(0, -7, 0, 22);
+            backCapeGrad.addColorStop(0, '#53050b');
+            backCapeGrad.addColorStop(0.5, '#99111e');
+            backCapeGrad.addColorStop(1, '#e0283b');
+            ctx.fillStyle = backCapeGrad;
+            ctx.beginPath();
+            ctx.moveTo(-10.5, -6);
+            ctx.lineTo(-18 - capeWave, 20.5);
+            ctx.lineTo(18 + capeWave, 20.5);
+            ctx.lineTo(10.5, -6);
+            ctx.closePath();
+            ctx.fill();
+
+            // Back Cape Folds
+            ctx.strokeStyle = '#3a0206';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath(); ctx.moveTo(-5, -4); ctx.lineTo(-7 - capeWave * 0.5, 19); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(0, 19); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(5, -4); ctx.lineTo(7 + capeWave * 0.5, 19); ctx.stroke();
         }
 
-        // 2. Armored Legs & Leather Greaves
-        ctx.fillStyle = '#0a0a0a';
-        ctx.fillRect(-7, 8 + stepL, 6, 12); ctx.fillRect(1, 8 + stepR, 6, 12);
-        ctx.fillStyle = '#543015'; // Dark leather boots
-        ctx.fillRect(-6, 9 + stepL, 4, 10); ctx.fillRect(2, 9 + stepR, 4, 10);
-        ctx.fillStyle = '#ffd700'; // Golden knee guard plates
-        ctx.fillRect(-6, 8 + stepL, 4, 3); ctx.fillRect(2, 8 + stepR, 4, 3);
+        // 2. Armored Legs & Knee Plates (足部鎧甲與深褐皮靴)
+        ctx.fillStyle = '#080808';
+        ctx.fillRect(-7.5, 8 + stepL, 6.5, 12);
+        ctx.fillRect(1, 8 + stepR, 6.5, 12);
+        // Boots
+        ctx.fillStyle = '#44260d';
+        ctx.fillRect(-6.5, 9 + stepL, 4.5, 10);
+        ctx.fillRect(2, 9 + stepR, 4.5, 10);
+        // Golden Knee-Guard Plates with specular glints
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(-6.5, 8 + stepL, 4.5, 3.5);
+        ctx.fillRect(2, 8 + stepR, 4.5, 3.5);
+        ctx.fillStyle = '#fff9db';
+        ctx.fillRect(-5.5, 8 + stepL, 1.5, 1.5);
+        ctx.fillRect(3, 8 + stepR, 1.5, 1.5);
 
-        // 3. Torso / Royal Loto Blue Cuirass with Gold Trim
-        ctx.fillStyle = '#0a0a0a';
-        ctx.fillRect(-10, -6, 20, 17);
-        ctx.fillStyle = '#155ac4'; // Royal Blue
-        ctx.fillRect(-8, -5, 16, 15);
-        ctx.fillStyle = '#ffd700'; // Gold chainmail border
-        ctx.strokeRect(-8.5, -5.5, 17, 16);
+        // 3. Torso / Royal Blue Cuirass with Gold Filigree (一代勇者皇家蔚藍胸甲)
+        ctx.fillStyle = '#060606';
+        ctx.fillRect(-10.5, -6, 21, 16.5);
+        // Royal Blue Plate Armor Gradient
+        const chestGrad = ctx.createLinearGradient(0, -6, 0, 10);
+        chestGrad.addColorStop(0, '#1d4ed8');
+        chestGrad.addColorStop(0.6, '#1e40af');
+        chestGrad.addColorStop(1, '#0f2771');
+        ctx.fillStyle = chestGrad;
+        ctx.fillRect(-8.5, -5, 17, 14.5);
 
-        // Emblazoned Golden Loto Phoenix (羅德之紋)
+        // Golden Armor Border / Rivets
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 1.3;
+        ctx.strokeRect(-8.5, -5, 17, 14.5);
+
+        // Emblazoned Golden Loto Bird Crest (胸前羅德神鳥徽記)
         if (isSouth) {
             ctx.fillStyle = '#ffd700';
             ctx.beginPath();
-            // Winged Phoenix symbol on chest
-            ctx.moveTo(0, -4); ctx.lineTo(6, -1); ctx.lineTo(4, 2); ctx.lineTo(0, 5); ctx.lineTo(-4, 2); ctx.lineTo(-6, -1);
-            ctx.closePath(); ctx.fill();
-            // Central Red Loto Core Gem
-            ctx.fillStyle = '#e63946';
-            ctx.beginPath(); ctx.arc(0, 0.5, 2.2, 0, Math.PI * 2); ctx.fill();
+            ctx.moveTo(0, -4.5);
+            ctx.lineTo(6.5, -1.5);
+            ctx.lineTo(4.5, 1.5);
+            ctx.lineTo(0, 5);
+            ctx.lineTo(-4.5, 1.5);
+            ctx.lineTo(-6.5, -1.5);
+            ctx.closePath();
+            ctx.fill();
+            // Core Crimson Gem
+            ctx.fillStyle = '#ef233c';
+            ctx.beginPath();
+            ctx.arc(0, 0, 2.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-0.8, -1.2, 1.2, 1.2);
         }
 
-        // Belt & Golden Lion Buckle
-        ctx.fillStyle = '#3a200a'; ctx.fillRect(-8, 6, 16, 4);
-        ctx.fillStyle = '#ffd700'; ctx.fillRect(-3, 6, 6, 4);
-        ctx.fillStyle = '#111'; ctx.fillRect(-1, 7, 2, 2);
+        // Leather Belt & Golden Medallion Buckle
+        ctx.fillStyle = '#2b1706';
+        ctx.fillRect(-8.5, 5.5, 17, 4);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(-3.5, 5.5, 7, 4);
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-1.2, 6.5, 2.4, 2);
 
-        // 4. Head, Spiky Hair & Toriyama Anime Expression
-        ctx.fillStyle = '#0a0a0a'; ctx.fillRect(-8, -19, 16, 14); // Head outline
-        ctx.fillStyle = '#ffdfba'; ctx.fillRect(-6, -18, 12, 12); // Peach skin
+        // 4. Golden Shoulder Pauldrons (立體金屬弧形肩鎧)
+        if (!isNorth) {
+            const drawPauldron = (px, py, flip) => {
+                ctx.save();
+                ctx.translate(px, py);
+                if (flip) ctx.scale(-1, 1);
+                ctx.fillStyle = '#060606';
+                ctx.beginPath();
+                ctx.moveTo(0, -6); ctx.lineTo(7, -3); ctx.lineTo(6, 6); ctx.lineTo(-1, 4); ctx.closePath();
+                ctx.fill();
+                const pGrad = ctx.createLinearGradient(0, -6, 6, 6);
+                pGrad.addColorStop(0, '#fff3b0');
+                pGrad.addColorStop(0.3, '#ffd700');
+                pGrad.addColorStop(1, '#b38f00');
+                ctx.fillStyle = pGrad;
+                ctx.beginPath();
+                ctx.moveTo(0.5, -4.8); ctx.lineTo(5.8, -2.2); ctx.lineTo(5, 4.8); ctx.lineTo(-0.2, 3.2); ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(0.5, -4.8); ctx.lineTo(5.8, -2.2); ctx.stroke();
+                ctx.fillStyle = '#ffd700';
+                ctx.beginPath(); ctx.arc(1, -2, 2.2, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#ef233c';
+                ctx.beginPath(); ctx.arc(1, -2, 1.1, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+            };
+            drawPauldron(-10.5, -4, false);
+            drawPauldron(10.5, -4, true);
+        }
 
-        // Spiky Brown Anime Hair (鳥山明經典刺蝟髮型)
-        ctx.fillStyle = '#4a2810';
+        // 5. Head, Face & Iconic DQ1 Horned Blue Helmet (一代經典雙角蔚藍兜鍪)
+        ctx.fillStyle = '#060606';
+        ctx.fillRect(-8.5, -19.5, 17, 14);
+        ctx.fillStyle = '#ffe0bd'; // Warm peach skin
+        ctx.fillRect(-6.5, -18.5, 13, 12);
+
+        // Spiky Dark Anime Hair Bangs (鳥山明風格額前刺蝟瀏海)
+        ctx.fillStyle = '#26170c';
         ctx.beginPath();
-        ctx.moveTo(-9, -18);
-        ctx.lineTo(-12, -25); ctx.lineTo(-7, -22);
-        ctx.lineTo(-4, -28); ctx.lineTo(0, -23);
-        ctx.lineTo(4, -28); ctx.lineTo(7, -22);
-        ctx.lineTo(12, -25); ctx.lineTo(9, -18);
-        ctx.closePath(); ctx.fill();
+        ctx.moveTo(-7.5, -16.5);
+        ctx.lineTo(-10.5, -23); ctx.lineTo(-6, -20.5);
+        ctx.lineTo(-3.5, -25); ctx.lineTo(0, -21.5);
+        ctx.lineTo(3.5, -25); ctx.lineTo(6, -20.5);
+        ctx.lineTo(10.5, -23); ctx.lineTo(7.5, -16.5);
+        ctx.closePath();
+        ctx.fill();
 
-        // Winged Silver-Gold Helmet & Diadem (羅德之盔 - 雙翼展翅與額前藍寶石)
-        ctx.fillStyle = '#ffd700'; // Golden Circlet
-        ctx.fillRect(-7, -17, 14, 4);
-        // Center Brilliant Sapphire
-        ctx.fillStyle = '#00d2ff';
-        ctx.beginPath(); ctx.arc(0, -15, 2.8, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(-0.8, -16, 1.2, 1.2); // Gem glint
-
-        // Winged Ears on Helmet
-        ctx.fillStyle = '#e0e0e0'; // Silver Feathers
-        ctx.beginPath(); ctx.moveTo(-7, -17); ctx.lineTo(-13, -24); ctx.lineTo(-9, -14); ctx.closePath(); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(7, -17); ctx.lineTo(13, -24); ctx.lineTo(9, -14); ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1;
+        // Cobalt Blue Helmet Skullcap (蔚藍鋼盔圓頂)
+        const helmGrad = ctx.createLinearGradient(0, -26, 0, -14);
+        helmGrad.addColorStop(0, '#2563eb');
+        helmGrad.addColorStop(0.5, '#1d4ed8');
+        helmGrad.addColorStop(1, '#0f2771');
+        ctx.fillStyle = helmGrad;
+        ctx.beginPath();
+        ctx.moveTo(-8.5, -16.5);
+        ctx.quadraticCurveTo(0, -28, 8.5, -16.5);
+        ctx.lineTo(8.5, -14.5);
+        ctx.lineTo(-8.5, -14.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#060606';
+        ctx.lineWidth = 1.3;
         ctx.stroke();
 
-        // Anime Eyes & Eyebrows
-        ctx.fillStyle = '#0a0a0a';
-        if (dir === 0) { // South (Front)
-            // Confident Eyebrows
-            ctx.fillRect(-5, -15, 4, 1.5); ctx.fillRect(1, -15, 4, 1.5);
-            // Expressive Eyes
-            ctx.fillRect(-4, -13, 3, 4); ctx.fillRect(1, -13, 3, 4);
-            ctx.fillStyle = '#ffffff'; ctx.fillRect(-3, -13, 1.5, 1.5); ctx.fillRect(2, -13, 1.5, 1.5); // Highlight
-        } else if (dir === 1) { // SE
-            ctx.fillRect(-2, -13, 3, 4); ctx.fillRect(3, -13, 3, 4);
-            ctx.fillStyle = '#fff'; ctx.fillRect(-1, -13, 1.5, 1.5);
-        } else if (dir === 7) { // SW
-            ctx.fillRect(-6, -13, 3, 4); ctx.fillRect(-1, -13, 3, 4);
-            ctx.fillStyle = '#fff'; ctx.fillRect(-5, -13, 1.5, 1.5);
-        } else if (dir === 2) { // East
-            ctx.fillRect(2, -13, 3, 4); ctx.fillStyle = '#fff'; ctx.fillRect(3, -13, 1.5, 1.5);
-        } else if (dir === 6) { // West
-            ctx.fillRect(-5, -13, 3, 4); ctx.fillStyle = '#fff'; ctx.fillRect(-4, -13, 1.5, 1.5);
-        } else { // North (Back view)
-            ctx.fillStyle = '#4a2810'; ctx.fillRect(-7, -18, 14, 12); // Back hair
-            // Sword Scabbard strapped across back
-            ctx.fillStyle = '#3a200a'; ctx.fillRect(-3, -17, 6, 26);
-            ctx.fillStyle = '#ffd700'; ctx.fillRect(-5, -10, 10, 4); ctx.fillRect(-4, 6, 8, 3);
-        }
+        // Golden Browband Rim (兜鍪金色眉框)
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(-8, -17.5, 16, 3.8);
+        ctx.fillStyle = '#fff4a3';
+        ctx.fillRect(-7.5, -17.5, 15, 1.2);
 
-        // 5. Sword of Loto & Shield of Loto (羅德之劍與羅德之盾)
-        if (!isNorth) {
-            if (isEast || dir === 0) {
-                // Shield on Left Arm (Right side from viewer in mirror)
-                this.drawLotoShield(ctx, -14, -2);
-                this.drawLotoSword(ctx, 11, -5);
-            } else if (isWest) {
-                this.drawLotoShield(ctx, 14, -2);
-                this.drawLotoSword(ctx, -11, -5);
+        // Center Red Ruby Teardrop Jewel (兜鍪額前紅寶石 - 一代勇者顯著標誌)
+        ctx.fillStyle = '#d90429';
+        ctx.beginPath();
+        ctx.ellipse(0, -16, 2.8, 3.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-1.0, -17.5, 1.5, 1.5);
+
+        // Cheek Protection Flaps (面甲兩側護腮護甲)
+        ctx.fillStyle = '#1d4ed8';
+        ctx.beginPath(); ctx.moveTo(-8.5, -16.5); ctx.lineTo(-8.5, -10.5); ctx.lineTo(-6.5, -8.5); ctx.lineTo(-6.5, -14.5); ctx.closePath(); ctx.fill();
+        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(8.5, -16.5); ctx.lineTo(8.5, -10.5); ctx.lineTo(6.5, -8.5); ctx.lineTo(6.5, -14.5); ctx.closePath(); ctx.fill();
+        ctx.stroke();
+
+        // Iconic Curved Upward Horns (一代勇者兜鍪雙大角 - 象牙白漸層與黃金底座)
+        const drawHorn = (isRight) => {
+            ctx.save();
+            const hx = isRight ? 7.5 : -7.5;
+            const hy = -17;
+            ctx.translate(hx, hy);
+            if (!isRight) ctx.scale(-1, 1);
+
+            // Gold Socket Ring at Base of Horn
+            ctx.fillStyle = '#ffd700';
+            ctx.fillRect(0, -3, 3, 5);
+
+            // Ivory Horn Curving Upwards and Outwards
+            ctx.fillStyle = '#060606';
+            ctx.beginPath();
+            ctx.moveTo(1, -2);
+            ctx.quadraticCurveTo(8, -12, 11, -24);
+            ctx.quadraticCurveTo(6, -14, 0, -4);
+            ctx.closePath();
+            ctx.fill();
+
+            const hornGrad = ctx.createLinearGradient(0, -4, 11, -24);
+            hornGrad.addColorStop(0, '#e5e7eb');
+            hornGrad.addColorStop(0.5, '#ffffff');
+            hornGrad.addColorStop(0.85, '#f8fafc');
+            hornGrad.addColorStop(1, '#ffd166');
+            ctx.fillStyle = hornGrad;
+            ctx.beginPath();
+            ctx.moveTo(1.2, -1.8);
+            ctx.quadraticCurveTo(7.6, -11.5, 10.2, -23.2);
+            ctx.quadraticCurveTo(5.5, -13.5, 0.4, -3.6);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 0.9;
+            ctx.beginPath();
+            ctx.moveTo(1.2, -1.8);
+            ctx.quadraticCurveTo(7.6, -11.5, 10.2, -23.2);
+            ctx.stroke();
+
+            ctx.restore();
+        };
+
+        if (isNorth) {
+            drawHorn(false);
+            drawHorn(true);
+            ctx.fillStyle = '#1e40af';
+            ctx.fillRect(-7.5, -16.5, 15, 11);
+            ctx.fillStyle = '#3a200a'; ctx.fillRect(-3, -16, 6, 26);
+            ctx.fillStyle = '#ffd700'; ctx.fillRect(-5, -9, 10, 3.5); ctx.fillRect(-4, 7, 8, 3);
+        } else {
+            drawHorn(false);
+            drawHorn(true);
+
+            // Expressive Toriyama Anime Face
+            ctx.fillStyle = '#060606';
+            if (dir === 0) { // South (Front)
+                ctx.fillRect(-5.5, -14.5, 4.5, 1.8);
+                ctx.fillRect(1, -14.5, 4.5, 1.8);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(-4.5, -12.5, 3.5, 4);
+                ctx.fillRect(1, -12.5, 3.5, 4);
+                ctx.fillStyle = '#111827';
+                ctx.fillRect(-3.5, -12.5, 2.2, 3.5);
+                ctx.fillRect(1.3, -12.5, 2.2, 3.5);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(-3.0, -12.2, 1.2, 1.2);
+                ctx.fillRect(1.8, -12.2, 1.2, 1.2);
+            } else if (dir === 1) { // SE (3/4 Right)
+                ctx.fillRect(-2, -14.5, 4, 1.8); ctx.fillRect(3, -14.5, 4, 1.8);
+                ctx.fillStyle = '#fff'; ctx.fillRect(-1.5, -12.5, 3, 4); ctx.fillRect(3.5, -12.5, 3, 4);
+                ctx.fillStyle = '#111'; ctx.fillRect(-0.8, -12.5, 2, 3.5); ctx.fillRect(4.2, -12.5, 2, 3.5);
+                ctx.fillStyle = '#fff'; ctx.fillRect(-0.5, -12.2, 1, 1); ctx.fillRect(4.5, -12.2, 1, 1);
+            } else if (dir === 7) { // SW (3/4 Left)
+                ctx.fillRect(-7, -14.5, 4, 1.8); ctx.fillRect(-2, -14.5, 4, 1.8);
+                ctx.fillStyle = '#fff'; ctx.fillRect(-6.5, -12.5, 3, 4); ctx.fillRect(-1.5, -12.5, 3, 4);
+                ctx.fillStyle = '#111'; ctx.fillRect(-5.8, -12.5, 2, 3.5); ctx.fillRect(-0.8, -12.5, 2, 3.5);
+                ctx.fillStyle = '#fff'; ctx.fillRect(-5.5, -12.2, 1, 1); ctx.fillRect(-0.5, -12.2, 1, 1);
+            } else if (dir === 2) { // East (Full Profile Right)
+                ctx.fillRect(2.5, -14.5, 4, 1.8);
+                ctx.fillStyle = '#fff'; ctx.fillRect(3, -12.5, 3.5, 4);
+                ctx.fillStyle = '#111'; ctx.fillRect(4, -12.5, 2.2, 3.5);
+                ctx.fillStyle = '#fff'; ctx.fillRect(4.3, -12.2, 1.2, 1.2);
+            } else if (dir === 6) { // West (Full Profile Left)
+                ctx.fillRect(-6.5, -14.5, 4, 1.8);
+                ctx.fillStyle = '#fff'; ctx.fillRect(-6.5, -12.5, 3.5, 4);
+                ctx.fillStyle = '#111'; ctx.fillRect(-6.2, -12.5, 2.2, 3.5);
+                ctx.fillStyle = '#fff'; ctx.fillRect(-5.5, -12.2, 1.2, 1.2);
             }
         }
+
+        // 6. HD-2D Erdrick's Sword & Shield (羅德之劍與羅德之盾)
+        if (!isNorth) {
+            if (isEast || dir === 0) {
+                this.drawLotoShieldHD2D(ctx, -14, -1, animTime);
+                this.drawLotoSwordHD2D(ctx, 12, -4, animTime);
+            } else if (isWest) {
+                this.drawLotoShieldHD2D(ctx, 14, -1, animTime);
+                this.drawLotoSwordHD2D(ctx, -12, -4, animTime);
+            }
+        }
+
+        // 7. HD-2D Dynamic Overhead Rim Light (虛擬頂部天光照射)
+        ctx.fillStyle = 'rgba(255, 245, 180, 0.28)';
+        ctx.beginPath();
+        ctx.ellipse(0, -22, 10, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
     }
 
-    // Legendary Shield of Loto (羅德之盾 - 藍色底、黃金雙翼鳥紋章、朱紅邊框)
-    drawLotoShield(ctx, x, y) {
+    // Legendary Shield of Loto (HD-2D 羅德之盾 - 皇家藍底、黃金雙翼鳥紋、朱紅邊框與寶石光芒)
+    drawLotoShieldHD2D(ctx, x, y, animTime = 0) {
         ctx.save();
         ctx.translate(x, y);
-        // Outer Rim (Crimson with Gold Studs)
-        ctx.fillStyle = '#9e0c1b';
-        ctx.beginPath();
-        ctx.moveTo(0, -9); ctx.lineTo(7, -6); ctx.lineTo(6, 4); ctx.lineTo(0, 10); ctx.lineTo(-6, 4); ctx.lineTo(-7, -6);
-        ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1.2; ctx.stroke();
 
-        // Inner Royal Blue Shield Field
-        ctx.fillStyle = '#155ac4';
+        // Shield Drop Shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
         ctx.beginPath();
-        ctx.moveTo(0, -7); ctx.lineTo(5, -4.5); ctx.lineTo(4.5, 3); ctx.lineTo(0, 8); ctx.lineTo(-4.5, 3); ctx.lineTo(-5, -4.5);
+        ctx.ellipse(1, 4, 8, 11, 0.1, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Outer Crimson Rim with Gold Studs
+        ctx.fillStyle = '#800f2f';
+        ctx.beginPath();
+        ctx.moveTo(0, -10.5); ctx.lineTo(8, -7); ctx.lineTo(7, 4.5); ctx.lineTo(0, 11.5); ctx.lineTo(-7, 4.5); ctx.lineTo(-8, -7);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1.4; ctx.stroke();
+
+        // Inner Royal Blue Shield Field with Metallic Specular
+        const shieldGrad = ctx.createLinearGradient(-6, -8, 6, 8);
+        shieldGrad.addColorStop(0, '#2563eb');
+        shieldGrad.addColorStop(0.5, '#1d4ed8');
+        shieldGrad.addColorStop(1, '#0f2771');
+        ctx.fillStyle = shieldGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, -8.5); ctx.lineTo(5.8, -5.5); ctx.lineTo(5.2, 3.5); ctx.lineTo(0, 9.5); ctx.lineTo(-5.2, 3.5); ctx.lineTo(-5.8, -5.5);
         ctx.closePath(); ctx.fill();
 
-        // Golden Double-Winged Loto Phoenix (黃金雙翼)
+        // Embossed Golden Loto Phoenix (黃金雙翼羅德之鳥紋章)
         ctx.fillStyle = '#ffd700';
         ctx.beginPath();
-        ctx.moveTo(0, -4); ctx.lineTo(3.5, -2); ctx.lineTo(2, 0); ctx.lineTo(0, 4); ctx.lineTo(-2, 0); ctx.lineTo(-3.5, -2);
+        ctx.moveTo(0, -5); ctx.lineTo(4.2, -2.5); ctx.lineTo(2.5, 0.5); ctx.lineTo(0, 5.5); ctx.lineTo(-2.5, 0.5); ctx.lineTo(-4.2, -2.5);
         ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff4a3';
+        ctx.fillRect(-0.8, -4, 1.6, 2);
+
+        // Gold Studs along Rim
+        ctx.fillStyle = '#ffd700';
+        [-6, 0, 6].forEach(sx => {
+            ctx.beginPath(); ctx.arc(sx * 0.9, -7.5, 1, 0, Math.PI * 2); ctx.fill();
+        });
+
+        // Specular Light Glint
+        const glint = Math.sin(animTime * 3) * 0.5 + 0.5;
+        ctx.fillStyle = `rgba(255, 255, 255, ${glint * 0.7})`;
+        ctx.beginPath(); ctx.arc(-2.5, -4, 2, 0, Math.PI * 2); ctx.fill();
+
         ctx.restore();
     }
 
-    // Legendary Sword of Loto (羅德之劍 - 黃金飛翼護手、神聖符文雙刃長劍)
-    drawLotoSword(ctx, x, y) {
+    // Legendary Sword of Loto (HD-2D 羅德之劍 - 展翼黃金護手、血槽神聖雙刃、高光閃爍)
+    drawLotoSwordHD2D(ctx, x, y, animTime = 0) {
         ctx.save();
         ctx.translate(x, y);
-        // Gleaming Steel Blade
-        ctx.fillStyle = '#e8edf3';
-        ctx.beginPath();
-        ctx.moveTo(0, -16); ctx.lineTo(2.5, -3); ctx.lineTo(-2.5, -3);
-        ctx.closePath(); ctx.fill();
-        // Central Fuller Groove
-        ctx.strokeStyle = '#9aa5b1'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(0, -3); ctx.stroke();
 
-        // Golden Winged Crossguard
+        // Gleaming Steel Blade with Central Fuller
+        ctx.fillStyle = '#060606';
+        ctx.beginPath();
+        ctx.moveTo(0, -18.5); ctx.lineTo(3.2, -3.5); ctx.lineTo(-3.2, -3.5); ctx.closePath();
+        ctx.fill();
+
+        const bladeGrad = ctx.createLinearGradient(-3, 0, 3, 0);
+        bladeGrad.addColorStop(0, '#dbeafe');
+        bladeGrad.addColorStop(0.5, '#ffffff');
+        bladeGrad.addColorStop(1, '#93c5fd');
+        ctx.fillStyle = bladeGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, -17.5); ctx.lineTo(2.4, -3.8); ctx.lineTo(-2.4, -3.8); ctx.closePath();
+        ctx.fill();
+
+        // Central Fuller Line
+        ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 0.9;
+        ctx.beginPath(); ctx.moveTo(0, -15.5); ctx.lineTo(0, -4); ctx.stroke();
+
+        // Golden Winged Crossguard (黃金雙翼劍格)
         ctx.fillStyle = '#ffd700';
         ctx.beginPath();
-        ctx.moveTo(-6, -2); ctx.lineTo(6, -2); ctx.lineTo(4, 1); ctx.lineTo(0, 2); ctx.lineTo(-4, 1);
+        ctx.moveTo(-7.5, -2.5); ctx.lineTo(7.5, -2.5); ctx.lineTo(5, 1.2); ctx.lineTo(0, 2.5); ctx.lineTo(-5, 1.2);
         ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#b48a00'; ctx.lineWidth = 0.8; ctx.stroke();
 
         // Red Ruby Center Gem
-        ctx.fillStyle = '#e63946'; ctx.beginPath(); ctx.arc(0, 0, 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ef233c'; ctx.beginPath(); ctx.arc(0, 0, 1.8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.fillRect(-0.6, -0.6, 1, 1);
 
-        // Hilt & Pommel Jewel
-        ctx.fillStyle = '#3a200a'; ctx.fillRect(-1, 1, 2, 5); // Grip
-        ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.arc(0, 7, 2, 0, Math.PI * 2); ctx.fill(); // Pommel
+        // Hilt & Golden Pommel
+        ctx.fillStyle = '#422006'; ctx.fillRect(-1.2, 1.5, 2.4, 5.5); // Grip
+        ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.arc(0, 7.8, 2.4, 0, Math.PI * 2); ctx.fill();
+
+        // Animated Glint Star Sparkle
+        const starPhase = (animTime * 3) % 4;
+        if (starPhase < 1.0) {
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(0, -14, 1.8 * starPhase, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         ctx.restore();
     }
 
@@ -367,6 +636,12 @@ class GameRenderer {
         ctx.fillStyle = '#ff0055';
         ctx.beginPath(); ctx.arc(staffX, -20, 4, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#ffffff'; ctx.fillRect(staffX - 1.5, -21.5, 2, 2);
+
+        // HD-2D Overhead Rim Light
+        ctx.fillStyle = 'rgba(255, 245, 180, 0.25)';
+        ctx.beginPath();
+        ctx.ellipse(0, -22, 10, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
     }
 
     // --- 3. MARTIAL ARTIST HD (DQ3 經典拳聖武道家 - 飄逸紅色英雄頭帶、格鬥護腕) ---
@@ -412,6 +687,12 @@ class GameRenderer {
             ctx.fillStyle = '#f8f9fa';
             ctx.fillRect(-11, 0, 4, 5); ctx.fillRect(7, 0, 4, 5);
         }
+
+        // HD-2D Overhead Rim Light
+        ctx.fillStyle = 'rgba(255, 245, 180, 0.25)';
+        ctx.beginPath();
+        ctx.ellipse(0, -22, 10, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
     }
 
     // --- 4. PRIEST HD (DQ 經典神聖引導者僧侶 - 主教冠冕、十字金繡法袍、神聖權杖) ---
@@ -444,6 +725,12 @@ class GameRenderer {
             ctx.beginPath(); ctx.arc(maceX + 1.2, -10, 4.5, 0, Math.PI * 2); ctx.fill(); // Mace Head
             ctx.fillStyle = '#ffd700'; ctx.fillRect(maceX - 1, -11, 4.5, 2);
         }
+
+        // HD-2D Overhead Rim Light
+        ctx.fillStyle = 'rgba(255, 245, 180, 0.25)';
+        ctx.beginPath();
+        ctx.ellipse(0, -22, 10, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
     }
 
     // =========================================================================

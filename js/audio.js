@@ -1,5 +1,6 @@
-// Symphonic Suite Dragon Quest - High-Fidelity Orchestral Audio Engine
-// Non-8bit: Features Concert Hall Reverb, Realistic Multi-Voice Strings, Resonant Brass, and Acoustic Timpani
+// Symphonic Suite Dragon Quest I - High-Fidelity Orchestral Audio Engine
+// Non-8bit: Realistic Multi-Voice Strings, Oboe/Woodwinds, Resonant Brass, Concert Timpani, and Stereo Hall Reverb
+// 100% Authentic Koichi Sugiyama DQ1 Scores: "広野を行く" (Unknown World) & "戦闘" (Fight)
 
 const NOTES = {
     // Octave 2
@@ -11,10 +12,15 @@ const NOTES = {
     // Octave 5
     C5: 523.25, Cs5: 554.37, D5: 587.33, Ds5: 622.25, E5: 659.25, F5: 698.46, Fs5: 739.99, G5: 783.99, Gs5: 830.61, A5: 880.00, As5: 932.33, B5: 987.77,
     // Octave 6
-    C6: 1046.50, D6: 1174.66, E6: 1318.51
+    C6: 1046.50, Cs6: 1108.73, D6: 1174.66, Ds6: 1244.51, E6: 1318.51, F6: 1396.91, Fs6: 1479.98, G6: 1567.98
 };
 
-const getFreq = (n) => typeof n === 'number' ? n : (NOTES[n] || 0);
+const getFreq = (n) => {
+    if (!n) return 0;
+    if (typeof n === 'number') return n;
+    const clean = n.replace('#', 's');
+    return NOTES[clean] || NOTES[n] || 0;
+};
 
 class SoundFX {
     constructor() {
@@ -61,19 +67,21 @@ class SoundFX {
         }
     }
 
-    // Generate natural acoustic concert hall impulse response
-    createConcertHallImpulse(sampleRate = 44100, duration = 1.8, decay = 2.4) {
+    // Synthesize a realistic stereophonic impulse response for a majestic cathedral / concert hall
+    createConcertHallImpulse(sampleRate, duration, decay) {
         const length = Math.floor(sampleRate * duration);
         const impulse = this.ctx.createBuffer(2, length, sampleRate);
         const left = impulse.getChannelData(0);
         const right = impulse.getChannelData(1);
 
         for (let i = 0; i < length; i++) {
-            const t = i / length;
-            const env = Math.exp(-t * decay);
-            // Stereo spread with randomized acoustic early reflections
-            left[i] = (Math.random() * 2 - 1) * env * (1 - t * 0.4);
-            right[i] = (Math.random() * 2 - 1) * env * (1 - t * 0.4);
+            const t = i / sampleRate;
+            // Exponential energy decay envelope
+            const envelope = Math.exp(-t * decay);
+            // Early reflections + dense diffuse reverberation tail
+            const diffusion = (Math.random() * 2 - 1) * 0.85 + (Math.sin(i * 0.04) * 0.15);
+            left[i] = diffusion * envelope;
+            right[i] = ((Math.random() * 2 - 1) * 0.85 + (Math.cos(i * 0.04) * 0.15)) * envelope;
         }
         return impulse;
     }
@@ -93,7 +101,6 @@ class SoundFX {
     // =========================================================================
 
     // 1. Symphonic Strings Ensemble (小提琴與大提琴管弦弦樂組)
-    // Warm detuned multi-oscillator chorus with natural vibrato and resonant body filter
     playStrings(freq, duration, gainVal = 0.085, hasVibrato = true) {
         if (!this.enabled || freq <= 0) return;
         this.init();
@@ -103,7 +110,6 @@ class SoundFX {
             const t = this.ctx.currentTime;
             const out = this.masterGain || this.ctx.destination;
 
-            // Dual detuned oscillators for lush string ensemble unison
             const osc1 = this.ctx.createOscillator();
             const osc2 = this.ctx.createOscillator();
             osc1.type = 'sawtooth';
@@ -111,14 +117,13 @@ class SoundFX {
 
             osc1.frequency.setValueAtTime(freq, t);
             osc2.frequency.setValueAtTime(freq, t);
-            osc1.detune.setValueAtTime(7, t);  // +7 cents
-            osc2.detune.setValueAtTime(-7, t); // -7 cents
+            osc1.detune.setValueAtTime(7, t);
+            osc2.detune.setValueAtTime(-7, t);
 
-            // Natural Violin Vibrato LFO
             if (hasVibrato && duration > 0.18) {
                 const lfo = this.ctx.createOscillator();
                 const lfoGain = this.ctx.createGain();
-                lfo.frequency.setValueAtTime(5.4, t); // 5.4 Hz natural vibrato
+                lfo.frequency.setValueAtTime(5.4, t);
                 lfoGain.gain.setValueAtTime(4.5, t);
                 lfo.connect(lfoGain);
                 lfoGain.connect(osc1.frequency);
@@ -127,13 +132,11 @@ class SoundFX {
                 lfo.stop(t + duration);
             }
 
-            // Warm Wooden Instrument Body Filter
             const filter = this.ctx.createBiquadFilter();
             filter.type = 'lowpass';
             filter.frequency.setValueAtTime(1150, t);
             filter.Q.setValueAtTime(1.1, t);
 
-            // Smooth bowed string envelope (Soft attack + warm acoustic release)
             const gain = this.ctx.createGain();
             const attackTime = 0.045;
             gain.gain.setValueAtTime(0.001, t);
@@ -146,7 +149,6 @@ class SoundFX {
             filter.connect(gain);
             gain.connect(out);
 
-            // Send to Concert Hall Reverb Bus
             if (this.reverbNode) {
                 gain.connect(this.reverbNode);
             }
@@ -158,8 +160,66 @@ class SoundFX {
         } catch (e) {}
     }
 
-    // 2. Orchestral Brass Fanfare (交響銅管小號與法國號組)
-    // Rich harmonic presence with dynamic lip articulation filter sweep
+    // 2. Symphonic Oboe & Woodwinds (交響木管雙簧管與長笛 - DQ1 原野曲主旋律標誌)
+    playWoodwind(freq, duration, gainVal = 0.09) {
+        if (!this.enabled || freq <= 0) return;
+        this.init();
+        if (!this.ctx) return;
+
+        try {
+            const t = this.ctx.currentTime;
+            const out = this.masterGain || this.ctx.destination;
+
+            const osc1 = this.ctx.createOscillator();
+            const osc2 = this.ctx.createOscillator();
+            osc1.type = 'triangle';
+            osc2.type = 'sine';
+
+            osc1.frequency.setValueAtTime(freq, t);
+            osc2.frequency.setValueAtTime(freq, t);
+
+            // Natural woodwind vibrato
+            if (duration > 0.22) {
+                const lfo = this.ctx.createOscillator();
+                const lfoGain = this.ctx.createGain();
+                lfo.frequency.setValueAtTime(5.1, t);
+                lfoGain.gain.setValueAtTime(3.8, t);
+                lfo.connect(lfoGain);
+                lfoGain.connect(osc1.frequency);
+                lfoGain.connect(osc2.frequency);
+                lfo.start(t + 0.08);
+                lfo.stop(t + duration);
+            }
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(1450, t);
+            filter.Q.setValueAtTime(1.8, t);
+
+            const gain = this.ctx.createGain();
+            const attackTime = 0.038;
+            gain.gain.setValueAtTime(0.001, t);
+            gain.gain.linearRampToValueAtTime(gainVal, t + attackTime);
+            gain.gain.setValueAtTime(gainVal * 0.95, t + duration * 0.75);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + duration + 0.15);
+
+            osc1.connect(filter);
+            osc2.connect(filter);
+            filter.connect(gain);
+            gain.connect(out);
+
+            if (this.reverbNode) {
+                gain.connect(this.reverbNode);
+            }
+
+            osc1.start(t);
+            osc2.start(t);
+            osc1.stop(t + duration + 0.16);
+            osc2.stop(t + duration + 0.16);
+        } catch (e) {}
+    }
+
+    // 3. Orchestral Brass Fanfare (交響銅管小號與法國號組)
     playBrass(freq, duration, gainVal = 0.095) {
         if (!this.enabled || freq <= 0) return;
         this.init();
@@ -176,13 +236,11 @@ class SoundFX {
 
             osc1.frequency.setValueAtTime(freq, t);
             osc2.frequency.setValueAtTime(freq, t);
-            osc2.detune.setValueAtTime(11, t); // Rich brass chorus
+            osc2.detune.setValueAtTime(11, t);
 
-            // Dynamic brass lip-articulation filter
             const filter = this.ctx.createBiquadFilter();
             filter.type = 'lowpass';
             filter.frequency.setValueAtTime(450, t);
-            // Fanfare 'Ta-Da' swelling open
             filter.frequency.exponentialRampToValueAtTime(2600, t + 0.038);
             filter.frequency.exponentialRampToValueAtTime(1400, t + duration);
             filter.Q.setValueAtTime(1.4, t);
@@ -208,8 +266,7 @@ class SoundFX {
         } catch (e) {}
     }
 
-    // 3. Acoustic Orchestral Timpani (交響樂定音鼓)
-    // Deep sub-bass acoustic membrane punch with pitch-drop resonance
+    // 4. Acoustic Orchestral Timpani (交響樂定音鼓)
     playTimpani(freq = 115, gainVal = 0.16) {
         if (!this.enabled) return;
         this.init();
@@ -221,7 +278,6 @@ class SoundFX {
 
             const osc = this.ctx.createOscillator();
             osc.type = 'sine';
-            // Classic Timpani pitch drop envelope
             osc.frequency.setValueAtTime(freq, t);
             osc.frequency.exponentialRampToValueAtTime(freq * 0.52, t + 0.38);
 
@@ -246,7 +302,7 @@ class SoundFX {
         } catch (e) {}
     }
 
-    // 4. Orchestral Snare & Marching Drums (管弦軍鼓)
+    // 5. Orchestral Snare & Marching Drums (管弦軍鼓)
     playMarchSnare(gainVal = 0.045) {
         if (!this.enabled) return;
         this.init();
@@ -265,7 +321,6 @@ class SoundFX {
             const noise = this.ctx.createBufferSource();
             noise.buffer = buffer;
 
-            // Bandpass filter for crisp acoustic snare wires
             const filter = this.ctx.createBiquadFilter();
             filter.type = 'bandpass';
             filter.frequency.setValueAtTime(1800, t);
@@ -283,7 +338,7 @@ class SoundFX {
         } catch (e) {}
     }
 
-    // 5. Orchestral Shimmer Cymbal (交響銅鈸)
+    // 6. Orchestral Shimmer Cymbal (交響銅鈸)
     playCymbal(gainVal = 0.055) {
         if (!this.enabled) return;
         this.init();
@@ -381,58 +436,59 @@ class SoundFX {
         } catch (e) {}
     }
 
-    playSelect() {
-        this.playTone(880, 0.06, 'triangle', 0.12);
-    }
-
-    playSlash() {
-        this.playTone(550, 0.10, 'sawtooth', 0.12, 90);
-    }
-
-    playCritical() {
-        this.playTone(1318.51, 0.06, 'sine', 0.16);
-        setTimeout(() => this.playTone(1760.00, 0.14, 'sine', 0.18), 45);
-    }
-
-    playMagic() {
-        this.playTone(320, 0.20, 'sine', 0.15, 1100);
-    }
-
-    playBoomerang() {
-        this.playTone(620, 0.11, 'triangle', 0.12, 320);
+    playAttack() {
+        this.playTone(330, 0.04, 'triangle', 0.08, 160);
     }
 
     playHit() {
-        this.playTone(200, 0.07, 'triangle', 0.12, 70);
+        this.playNoise(0.06, 0.09, 800);
+        this.playTone(150, 0.05, 'sawtooth', 0.06, 50);
     }
 
-    playInstantKill() {
-        this.playBrass(880, 0.25, 0.18);
-        this.playNoise(0.2, 0.18, 2400);
+    playEnemyHit() {
+        this.playNoise(0.04, 0.07, 1000);
     }
 
-    playExplosion() {
-        this.playTimpani(90, 0.28);
-        this.playNoise(0.42, 0.25, 800);
+    playKill() {
+        this.playTone(400, 0.08, 'triangle', 0.09, 80);
     }
 
     playExp() {
-        const pitches = [1046.50, 1174.66, 1318.51, 1567.98, 1760.00];
-        const pitch = pitches[Math.floor(Math.random() * pitches.length)];
-        this.playTone(pitch, 0.08, 'sine', 0.09);
+        const t = this.ctx ? this.ctx.currentTime : 0;
+        const freqs = [784, 880, 1046];
+        const f = freqs[Math.floor((t * 10) % freqs.length)];
+        this.playTone(f, 0.04, 'sine', 0.06);
     }
 
-    playHurt() {
-        this.playTone(130, 0.18, 'triangle', 0.18, 50);
+    playFireball() {
+        this.playNoise(0.22, 0.14, 600);
+        this.playTone(280, 0.18, 'sawtooth', 0.08, 90);
+    }
+
+    playLightning() {
+        this.playNoise(0.32, 0.16, 2800);
+        this.playTone(700, 0.22, 'sawtooth', 0.10, 120);
+    }
+
+    playHoly() {
+        this.playTone(587.33, 0.28, 'sine', 0.09);
+        setTimeout(() => this.playTone(880.00, 0.28, 'sine', 0.07), 60);
+    }
+
+    playSwordBeam() {
+        this.playTone(440, 0.14, 'triangle', 0.09, 880);
+    }
+
+    playBoomerang() {
+        this.playTone(350, 0.08, 'sine', 0.06, 550);
     }
 
     playBossRoar() {
-        this.playTimpani(75, 0.32);
-        this.playTone(95, 0.7, 'sawtooth', 0.30, 40);
-        this.playNoise(0.55, 0.28, 450);
+        this.playNoise(0.65, 0.20, 300);
+        this.playTone(120, 0.55, 'sawtooth', 0.15, 45);
+        this.playTimpani(90, 0.25);
     }
 
-    // Classic DQ Level Up Fanfare (C5 - E5 - G5 - C6)
     playLevelUp() {
         if (!this.enabled) return;
         this.init();
@@ -449,7 +505,6 @@ class SoundFX {
         });
     }
 
-    // Classic DQ Treasure Chest Fanfare
     playChest() {
         if (!this.enabled) return;
         this.init();
@@ -512,9 +567,9 @@ class SoundFX {
     }
 
     // =========================================================================
-    // SYMPHONIC SUITE DRAGON QUEST (FULL ORCHESTRA SOUNDTRACK)
-    // 1. "冒險的旅程" (Adventure / 冒険の旅 - DQ3 Overworld Symphonic Suite)
-    // 2. "勇者的挑戰" (Hero's Challenge / 勇者の挑戦 - DQ3 Boss Battle Symphonic Suite)
+    // SYMPHONIC SUITE DRAGON QUEST I (AUTHENTIC REMAKE ORCHESTRA SOUNDTRACK)
+    // 1. "広野を行く" (Unknown World - DQ1 Overworld Symphonic Suite)
+    // 2. "戦闘" (Fight / Battle - DQ1 Battle Theme Symphonic Suite)
     // =========================================================================
 
     startTrack(trackName) {
@@ -553,141 +608,130 @@ class SoundFX {
         }
     }
 
-    // 1. Dragon Quest III Symphonic Overworld: "冒險的旅程" (Adventure / 冒険の旅)
-    // Composed by Koichi Sugiyama - Full Orchestra Performance
+    // 1. Dragon Quest I Symphonic Overworld: "広野を行く" (Unknown World / 走向廣闊的原野)
+    // Composed by Koichi Sugiyama - Full Orchestra Performance (D Dorian Mode)
     runDqFieldTheme() {
-        const lead = [
-            'G4', 'G4', 'C5', 'C5', 'D5', 'D5', 'E5', 'E5',  'E5', 'E5', 'D5', 'D5', 'C5', 'C5', 'D5', 'D5',
-            'G4', 'G4', 'G4', 'G4', 0, 0, 'G4', 'G4',        'A4', 'A4', 'B4', 'B4', 'C5', 'C5', 'D5', 'D5',
-            'E5', 'E5', 'F5', 'F5', 'G5', 'G5', 'G5', 'G5',  'C6', 'C6', 'C6', 'C6', 'B5', 'B5', 'A5', 'A5',
-            'G5', 'G5', 'G5', 'G5', 'G5', 'G5', 'G5', 'G5',  'A5', 'A5', 'G5', 'G5', 'F5', 'F5', 'E5', 'E5',
-            'D5', 'D5', 'D5', 'D5', 'D5', 'D5', 'D5', 'D5',  'E5', 'E5', 'D5', 'D5', 'C5', 'C5', 'B4', 'B4',
-            'C5', 'C5', 'C5', 'C5', 'C5', 'C5', 'C5', 'C5',  0, 0, 0, 0, 0, 0, 0, 0
-        ];
-
-        const harmony = [
-            'E4', 'E4', 'G4', 'G4', 'B4', 'B4', 'C5', 'C5',  'C5', 'C5', 'B4', 'B4', 'A4', 'A4', 'B4', 'B4',
-            'D4', 'D4', 'D4', 'D4', 0, 0, 'E4', 'E4',        'F4', 'F4', 'G4', 'G4', 'A4', 'A4', 'B4', 'B4',
-            'C5', 'C5', 'D5', 'D5', 'E5', 'E5', 'E5', 'E5',  'A5', 'A5', 'A5', 'A5', 'G5', 'G5', 'F5', 'F5',
-            'E5', 'E5', 'E5', 'E5', 'E5', 'E5', 'E5', 'E5',  'F5', 'F5', 'E5', 'E5', 'D5', 'D5', 'C5', 'C5',
-            'B4', 'B4', 'B4', 'B4', 'B4', 'B4', 'B4', 'B4',  'C5', 'C5', 'B4', 'B4', 'A4', 'A4', 'G4', 'G4',
-            'E4', 'E4', 'E4', 'E4', 'E4', 'E4', 'E4', 'E4',  0, 0, 0, 0, 0, 0, 0, 0
-        ];
-
-        const bass = [
-            'C3', 'G3', 'C3', 'G3', 'C3', 'G3', 'C3', 'G3',  'C3', 'G3', 'C3', 'G3', 'D3', 'A3', 'D3', 'A3',
-            'G3', 'D3', 'G3', 'D3', 'G3', 'D3', 'G3', 'D3',  'G3', 'D3', 'G3', 'D3', 'G3', 'B3', 'D4', 'G3',
-            'C3', 'G3', 'C3', 'G3', 'C3', 'G3', 'C3', 'G3',  'F3', 'C4', 'F3', 'C4', 'F3', 'C4', 'F3', 'C4',
-            'C3', 'G3', 'C3', 'G3', 'C3', 'G3', 'C3', 'G3',  'F3', 'C4', 'F3', 'C4', 'C3', 'G3', 'C3', 'G3',
-            'G3', 'D3', 'G3', 'D3', 'G3', 'D3', 'G3', 'D3',  'G3', 'D3', 'G3', 'D3', 'G3', 'B3', 'D4', 'G3',
-            'C3', 'G3', 'E3', 'G3', 'C3', 'G3', 'E3', 'G3',  'C3', 0, 0, 0, 0, 0, 0, 0
-        ];
+        const lead = ["D5",0,"A5",0,"G5",0,0,0,0,0,"F5","E5","D5",0,"C5","A#4","C5","A4","E5",0,"D5",0,0,0,0,0,0,0,0,0,0,0,"A5",0,"C6",0,"B5",0,0,0,0,0,"G5","F5","E5",0,"F5","G5","A5",0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        const leadDur = [2,1,2,1,6,1,1,1,1,1,1,1,2,1,1,1,1,1,2,1,12,1,1,1,1,1,1,1,1,1,1,1,2,1,2,1,6,1,1,1,1,1,1,1,2,1,1,1,16,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
+        const counter = ["D4","A4","F4","A4","D4","B4","G4","B4","D4","C5","A4","C5","D4","A#4","F4","A#4","E4","C5","A4","C5","D4","A4","F#4","A4","D4","A4","F#4","A4","G4","A#4","A4","C5","D4","C5","A4","C5","D4","B4","G4","B4","D4","B4","G4","B4","D4","A#4","G#4","A#4","C#4","A4","E4","A4","D4","A4","E4","A4","C#4","A4","E4","A4","B3","A4","C#4","A4"];
+        const bass = ["D3",0,0,0,"G2",0,0,0,"F2",0,0,0,"A#2",0,0,0,"A2",0,0,0,"D3",0,0,0,0,0,0,0,"G2",0,"A2",0,"D3",0,0,0,"G2",0,0,0,0,0,0,0,"E2",0,0,0,"A2",0,0,0,0,0,0,0,"A2",0,0,0,0,0,0,0];
+        const bassDur = [4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,4,1,1,1,8,1,1,1,1,1,1,1,2,1,2,1,4,1,1,1,8,1,1,1,1,1,1,1,4,1,1,1,8,1,1,1,1,1,1,1,8,1,1,1,1,1,1,1];
 
         let step = 0;
-        const stepTime = 124; // Allegro March Tempo (~120 BPM)
+        const beatTime = 550; // Majestic Wandering Tempo (~109 BPM)
 
         const loop = () => {
             if (this.currentTrack !== 'field' || !this.enabled) return;
 
-            const idx = step % lead.length;
-            const lNote = getFreq(lead[idx]);
-            const hNote = getFreq(harmony[idx]);
-            const bNote = getFreq(bass[idx]);
+            const idx = step % 64;
 
-            // Brass Section on Triumphant Lead Melody
-            if (lNote > 0) {
-                this.playBrass(lNote, 0.22, 0.095);
+            // 1. Lead Melody: Oboe/Woodwind solo with soft Violin reinforcement
+            if (lead[idx]) {
+                const f = getFreq(lead[idx]);
+                const durSec = (leadDur[idx] || 1) * 0.52;
+                this.playWoodwind(f, durSec, 0.095);
+                this.playStrings(f, durSec, 0.065, true);
             }
 
-            // String Section on Harmonic Counterpoint
-            if (hNote > 0) {
-                this.playStrings(hNote, 0.20, 0.075);
+            // 2. Counterpoint Arpeggios: Weaving string & harp arpeggio
+            if (counter[idx]) {
+                const cf = getFreq(counter[idx]);
+                this.playStrings(cf, 0.42, 0.06, false);
             }
 
-            // Double Bass & Cello Section on Walking Bassline
-            if (bNote > 0) {
-                this.playStrings(bNote, 0.18, 0.085, false);
+            // 3. Deep Foundation Bass: Contrabass & Cello
+            if (bass[idx]) {
+                const bf = getFreq(bass[idx]);
+                const bDur = (bassDur[idx] || 2) * 0.50;
+                this.playStrings(bf, bDur, 0.085, false);
             }
 
-            // Concert Timpani & Orchestral Snare Percussion
-            if (idx % 16 === 0) {
-                this.playTimpani(110, 0.18); // Downbeat Timpani Punch
-            } else if (idx % 4 === 2) {
-                this.playMarchSnare(0.04);   // Concert Snare Backbeat
+            // 4. Subtle Orchestral Accents
+            if (idx === 0 || idx === 32) {
+                this.playTimpani(110, 0.12);
+            } else if (idx === 20 || idx === 48) {
+                this.playCymbal(0.035);
             }
 
             step++;
-            this.bgmTimer = setTimeout(loop, stepTime);
+            this.bgmTimer = setTimeout(loop, beatTime);
         };
         loop();
     }
 
-    // 2. Dragon Quest III Symphonic Boss Battle: "勇者的挑戰" (Hero's Challenge / 勇者の挑戦)
-    // Towering Brass, Galloping Double Basses, Thunderous Timpani & Crash Cymbals
+    // 2. Dragon Quest I Symphonic Battle: "戦闘" (Fight / Battle Theme)
+    // Composed by Koichi Sugiyama - Diminished Runs, Driving Brass, Walking Bass & Snare March
     runDqBossTheme() {
-        const lead = [
-            'D4', 0, 'F4', 0, 'G4', 0, 'Gs4', 0,   'A4', 0, 0, 0, 'D5', 0, 'C5', 0,
-            'A4', 0, 'F4', 0, 'G4', 0, 0, 0,       'D4', 0, 'F4', 'G4', 'Gs4', 0, 'A4', 0,
-            'D5', 0, 'D5', 0, 'C5', 0, 'A4', 0,    'Gs4', 0, 'A4', 0, 'F4', 0, 'D4', 0,
-            'F4', 0, 'G4', 0, 'A4', 0, 'C5', 0,    'D5', 'D5', 'C5', 'A4', 'Gs4', 'A4', 'D5', 0
-        ];
+        const introLead = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,"C3","D#3","F#3","A3","C4","D#4","F#4","A4","C5","A4","F#4","D#4","C4","A3","F#3","D#3","C3","D#3","F#3","A3","C4","D#4","F#4","A4","C5","A4","F#4","D#4","C4","A3","F#3","D#3","C4",0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,"C3",0,"C#3",0,"D3",0,"E3",0];
+        const introBass = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+        const loopLead = ["F4",0,0,0,0,0,"G4","A4","B4",0,0,0,0,0,"F#4","G#4","A#4",0,0,0,0,0,"F4","G4","A4",0,0,0,0,0,"G#4","A#4","C5",0,0,0,0,0,"F#4","G#4","A#4",0,0,0,0,0,"F#4","G#4","A#4",0,0,0,0,0,"F4","G4","A4",0,0,0,0,0,"D#4","F4","G4",0,0,0,0,0,"C#5","D#5","F5",0,0,0,0,0,"C5","D5","E5",0,0,0,0,0,"B4","C#5","D#5",0,0,0,0,0,"B4","C#5","D#5",0,0,0,0,0,"A#4","C5","D5",0,0,0,0,0,"A4","B4","C#5",0,0,0,0,0,"A#4","C5","D5",0,0,0,0,0,"D#5","F5","G5",0,"D5","G5","F#5",0,"D#5","F#5","F5",0,"D5","F5","E5",0,"C#5","E5","D#5",0,"C5","A4","F#4",0,"D#4","C4","C#4",0,"E3","G3","A#3",0,"C#4","E4","F4",0,0,0,0,0,"G4","A4","B4",0,0,0,0,0,"F#4","G#4","A#4",0,0,0,0,0,"F4","G4","A4",0,0,0,0,0,"G#4","A#4","C5",0,0,0,0,0,"F#4","G#4","A#4",0,0,0,0,0,"F#4","G#4","A#4",0,0,0,0,0,"F4","G4","A4",0,0,0,0,0,"D#4","F4","G4",0,0,0,0,0,"C#5","D#5","F5",0,0,0,0,0,"C5","D5","E5",0,0,0,0,0,"B4","C#5","D#5",0,0,0,0,0,"B4","C#5","D#5",0,0,0,0,0,"A#4","C5","D5",0,0,0,0,0,"A4","B4","C#5",0,0,0,0,0,"A#4","C5","D5",0,0,0,0,0,"D#5","F5","G5",0,"D5","G5","F#5",0,"D#5","F#5","F5",0,"D5","F5","E5",0,"C#5","E5","D#5",0,"C5","A4","F#4",0,"D#4","C4","C#4",0,"E3","G3","A#3",0,"C#4","E4"];
+        const loopLeadDur = [1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,1.375,0.25,0.25,0.25,0.25,0.25,0.125,0.125,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375,0.375,0.25,0.375,0.375];
+        const loopBass = ["F3","G#3","C4",0,0,0,"D4",0,"F3","G#3","B3",0,0,0,"D4",0,"G3","A#3","C#4",0,0,0,"E4",0,"D3","F3","A3",0,0,0,"C4",0,"A3","C4","D#4",0,0,0,"G4",0,"D#3","G3","C#4",0,0,0,"E4",0,"F#3","A#3","D4",0,0,0,"F#4",0,"D3","F#3","A3",0,0,0,"D4",0,"G3","A#3","D4",0,0,0,"E4",0,"G3","B3","D4",0,0,0,"F4",0,"C3","G3","A#3",0,0,0,"C#4",0,"F3","F#3","A3",0,0,0,"C4",0,"B2","F3","G#3",0,0,0,"D#4",0,"B2","F3","G#3",0,0,0,"D4",0,"A2","E3","G3",0,0,0,"A#3",0,"D3","F#3","A3",0,0,0,"D4",0,"A#4",0,"G4","A#4","A4",0,"F#4","A4","G#4",0,"F4","G#4","G4",0,"E4","G4","F#4",0,"A4","F#4","D#4",0,"C4","A3","A#3",0,"D3","E3","G3",0,"A#3","C#4","F3","G#3","C4",0,0,0,"D4",0,"F3","G#3","B3",0,0,0,"D4",0,"G3","A#3","C#4",0,0,0,"E4",0,"D3","F3","A3",0,0,0,"C4",0,"A3","C4","D#4",0,0,0,"G4",0,"D#3","G3","C#4",0,0,0,"E4",0,"F#3","A#3","D4",0,0,0,"F#4",0,"D3","F#3","A3",0,0,0,"D4",0,"G3","A#3","D4",0,0,0,"E4",0,"G3","B3","D4",0,0,0,"F4",0,"C3","G3","A#3",0,0,0,"C#4",0,"F3","F#3","A3",0,0,0,"C4",0,"B2","F3","G#3",0,0,0,"D#4",0,"B2","F3","G#3",0,0,0,"D4",0,"A2","E3","G3",0,0,0,"A#3",0,"D3","F#3","A3",0,0,0,"D4",0,"A#4",0,"G4","A#4","A4",0,"F#4","A4","G#4",0,"F4","G#4","G4",0,"E4","G4","F#4",0,"A4","F#4","D#4",0,"C4","A3","A#3",0,"D3","E3","G3",0,"A#3","C#4"];
 
-        const harmony = [
-            'A3', 0, 'D4', 0, 'E4', 0, 'F4', 0,    'F4', 0, 0, 0, 'A4', 0, 'G4', 0,
-            'F4', 0, 'D4', 0, 'E4', 0, 0, 0,       'A3', 0, 'D4', 'E4', 'F4', 0, 'F4', 0,
-            'A4', 0, 'A4', 0, 'G4', 0, 'F4', 0,    'E4', 0, 'F4', 0, 'D4', 0, 'A3', 0,
-            'D4', 0, 'E4', 0, 'F4', 0, 'G4', 0,    'A4', 'A4', 'G4', 'F4', 'E4', 'F4', 'A4', 0
-        ];
+        let inIntro = true;
+        let introStep = 0;
+        let loopStep = 0;
+        const introStepTime = 105; // Fast diminished cascade
+        const loopStepTime = 100;  // 16th note step at ~150 BPM
 
-        const bass = [
-            'D3', 'D3', 'A2', 'D3',  'D3', 'D3', 'A2', 'D3',  'Cs3', 'Cs3', 'A2', 'Cs3',  'Cs3', 'Cs3', 'A2', 'Cs3',
-            'C3', 'C3', 'G2', 'C3',  'C3', 'C3', 'G2', 'C3',  'B2',  'B2',  'Fs2', 'B2',  'B2',  'B2',  'Fs2', 'B2',
-            'As2', 'As2', 'F2', 'As2',  'As2', 'As2', 'F2', 'As2',  'A2', 'A2', 'E2', 'A2',  'A2', 'A2', 'E2', 'A2',
-            'Gs2', 'Gs2', 'Ds2', 'Gs2',  'Gs2', 'Gs2', 'Ds2', 'Gs2',  'A2', 'A2', 'Cs3', 'E3',  'A3', 'A3', 'A2', 0
-        ];
-
-        let step = 0;
-        const stepTime = 106; // Presto dramatic tempo
-
-        const loop = () => {
+        const playIntro = () => {
             if (this.currentTrack !== 'boss' || !this.enabled) return;
 
-            const idx = step % bass.length;
-            const lNote = getFreq(lead[idx % lead.length]);
-            const hNote = getFreq(harmony[idx % harmony.length]);
-            const bNote = getFreq(bass[idx]);
-
-            // Low Cellos and Double Basses on Galloping Ostinato
-            if (bNote > 0) {
-                this.playStrings(bNote, 0.12, 0.10, false);
+            if (introStep < introLead.length) {
+                const l = introLead[introStep];
+                const b = introBass[introStep];
+                if (l) {
+                    this.playStrings(getFreq(l), 0.12, 0.085, false);
+                }
+                if (b) {
+                    this.playStrings(getFreq(b), 0.12, 0.09, false);
+                }
+                if (introStep === 0) {
+                    this.playTimpani(120, 0.22);
+                    this.playCymbal(0.06);
+                }
+                introStep++;
+                this.bgmTimer = setTimeout(playIntro, introStepTime);
+            } else {
+                inIntro = false;
+                playMainLoop();
             }
-
-            // Trumpet & French Horn Lead Fanfare
-            if (lNote > 0) {
-                this.playBrass(lNote, 0.18, 0.11);
-            }
-
-            // Trombone & Woodwind Harmony Counterpoint
-            if (hNote > 0) {
-                this.playBrass(hNote, 0.15, 0.06);
-            }
-
-            // Heavy Orchestral Timpani Strikes on Strong Beats
-            if (idx % 8 === 0) {
-                this.playTimpani(95, 0.22);
-            } else if (idx % 4 === 2) {
-                this.playMarchSnare(0.05);
-            }
-
-            // Dramatic Orchestral Crash Cymbal on Fanfare Peaks
-            if (idx === 0 || idx === 32 || idx === 56) {
-                this.playCymbal(0.065);
-            }
-
-            step++;
-            this.bgmTimer = setTimeout(loop, stepTime);
         };
-        loop();
+
+        const playMainLoop = () => {
+            if (this.currentTrack !== 'boss' || !this.enabled) return;
+
+            const idx = loopStep % loopLead.length;
+            const l = loopLead[idx];
+            const dur = (loopLeadDur[idx] || 0.25) * 0.40;
+            const b = loopBass[idx];
+
+            // Triumphant Brass Lead
+            if (l) {
+                this.playBrass(getFreq(l), dur, 0.11);
+            }
+
+            // Cellos & Bass Ostinato
+            if (b) {
+                this.playStrings(getFreq(b), 0.14, 0.095, false);
+            }
+
+            // March Snare & Timpani Accents
+            if (idx % 4 === 2) {
+                this.playMarchSnare(0.045);
+            }
+            if (idx % 16 === 0) {
+                this.playTimpani(98, 0.18);
+            }
+            if (idx === 0 || idx === 128) {
+                this.playCymbal(0.055);
+            }
+
+            loopStep++;
+            this.bgmTimer = setTimeout(playMainLoop, loopStepTime);
+        };
+
+        playIntro();
     }
 
     stopBgm() {
